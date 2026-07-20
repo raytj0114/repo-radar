@@ -1,0 +1,90 @@
+// RepoRadar schema
+// 変更は必ず `prisma migrate dev` で行うこと（db push 禁止 / CLAUDE.md 不変条件4）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---- Auth.js (JWT戦略のため Session / VerificationToken は持たない) ----
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String?        @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  favoriteRepos FavoriteRepo[]
+  digests       DailyDigest[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+// ---- アプリ本体 ----
+
+model FavoriteRepo {
+  id        String   @id @default(cuid())
+  userId    String
+  owner     String // 例: "vercel"
+  name      String // 例: "next.js"
+  fullName  String // "vercel/next.js"（表示・検索用）
+  avatarUrl String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, owner, name])
+  @@index([userId])
+}
+
+// AI要約キャッシュ。リリースは不変なのでTTLを持たない。
+// cacheKey = "owner/repo@tagName"
+model ReleaseSummary {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  owner     String
+  repo      String
+  tagName   String
+  summary   String   @db.Text
+  model     String // 生成に使ったモデル名（プロンプト改善時の棚卸し用）
+  createdAt DateTime @default(now())
+
+  @@index([owner, repo])
+}
+
+// デイリーダイジェスト。cacheKey = "digest:YYYY-MM-DD:userId"
+model DailyDigest {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  userId    String
+  date      DateTime @db.Date
+  content   String   @db.Text
+  model     String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}

@@ -97,6 +97,39 @@ describe('レート制限', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('searchプールの残量が少なくてもcoreの呼び出しは遮断しない（プールは別枠）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse(searchFixture, {
+        headers: { 'x-ratelimit-remaining': '25', 'x-ratelimit-resource': 'search' },
+      })
+    );
+    await client.searchTrendingRepositories({ createdAfter: new Date() });
+
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse(repositoryFixture, {
+        headers: { 'x-ratelimit-remaining': '4900', 'x-ratelimit-resource': 'core' },
+      })
+    );
+    await expect(client.fetchRepository('vercel', 'next.js')).resolves.not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('searchプールの残量がフロア(3)未満になったら検索を拒否する', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse(searchFixture, {
+        headers: { 'x-ratelimit-remaining': '2', 'x-ratelimit-resource': 'search' },
+      })
+    );
+    await client.searchTrendingRepositories({ createdAfter: new Date() });
+
+    await expect(
+      client.searchTrendingRepositories({ createdAfter: new Date() })
+    ).rejects.toBeInstanceOf(client.GitHubRateLimitError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('残量が十分なら呼び出しを続行する', async () => {
     const client = await importClient();
     fetchMock.mockResolvedValue(

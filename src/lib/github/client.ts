@@ -16,8 +16,15 @@ const BASE_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const PER_PAGE = 100;
 
-// レート残量がこの値を下回ったら新規呼び出しを止め、明示的なエラーを返す
-const RATE_LIMIT_FLOOR = 100;
+// レート残量がこの値を下回ったら新規呼び出しを止め、明示的なエラーを返す。
+// GitHubのレート枠はリソース別（core: 5,000/h、search: 30/min）なので、
+// フロアも必ずリソース別に判定する（グローバルに判定すると検索1回でcoreまで遮断される）
+const RATE_LIMIT_FLOORS = {
+  core: 100,
+  search: 3,
+} as const;
+
+type RateLimitResource = keyof typeof RATE_LIMIT_FLOORS;
 
 // ページネーションの上限。リリースは最大3ページ（=300件）まで
 const MAX_RELEASE_PAGES = 3;
@@ -45,23 +52,34 @@ export class GitHubRateLimitError extends GitHubAPIError {
   }
 }
 
-// 直近のレスポンスで観測したレート残量（インスタンス単位のベストエフォート）
-let rateLimitRemaining: number | null = null;
+// 直近のレスポンスで観測したリソース別レート残量（インスタンス単位のベストエフォート）
+const rateLimitRemaining = new Map<RateLimitResource, number>();
 
-function trackRateLimit(res: Response): void {
+function resourceForUrl(url: string): RateLimitResource {
+  return new URL(url).pathname.startsWith('/search/') ? 'search' : 'core';
+}
+
+function trackRateLimit(res: Response, fallbackResource: RateLimitResource): void {
   const header = res.headers.get('x-ratelimit-remaining');
   if (header === null) return;
   const remaining = Number(header);
-  if (Number.isFinite(remaining)) {
-    rateLimitRemaining = remaining;
-  }
+  if (!Number.isFinite(remaining)) return;
+  // レスポンスが属するプールは x-ratelimit-resource が正。無ければURLから推定
+  const reported = res.headers.get('x-ratelimit-resource');
+  const resource: RateLimitResource =
+    reported !== null && reported in RATE_LIMIT_FLOORS
+      ? (reported as RateLimitResource)
+      : fallbackResource;
+  rateLimitRemaining.set(resource, remaining);
 }
 
 async function githubFetch(pathOrUrl: string, revalidate: number): Promise<Response> {
-  if (rateLimitRemaining !== null && rateLimitRemaining < RATE_LIMIT_FLOOR) {
+  const url = pathOrUrl.startsWith(`${BASE_URL}/`) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
+  const resource = resourceForUrl(url);
+  const remaining = rateLimitRemaining.get(resource);
+  if (remaining !== undefined && remaining < RATE_LIMIT_FLOORS[resource]) {
     throw new GitHubRateLimitError();
   }
-  const url = pathOrUrl.startsWith(`${BASE_URL}/`) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${env.GITHUB_API_TOKEN}`,
@@ -71,7 +89,7 @@ async function githubFetch(pathOrUrl: string, revalidate: number): Promise<Respo
     },
     next: { revalidate },
   });
-  trackRateLimit(res);
+  trackRateLimit(res, resource);
   return res;
 }
 

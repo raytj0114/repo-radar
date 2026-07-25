@@ -8,9 +8,21 @@ export async function Header() {
   return (
     <header className="border-b border-gray-200">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-bold tracking-tight">
-          RepoRadar
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/" className="text-lg font-bold tracking-tight">
+            RepoRadar
+          </Link>
+          {session?.user && (
+            <nav className="flex items-center gap-4 text-sm text-gray-600">
+              <Link href="/" className="hover:text-gray-900">
+                ダッシュボード
+              </Link>
+              <Link href="/trending" className="hover:text-gray-900">
+                トレンド
+              </Link>
+            </nav>
+          )}
+        </div>
         {session?.user ? (
           <div className="flex items-center gap-3">
             {session.user.image && (

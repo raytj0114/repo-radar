@@ -9,11 +9,11 @@
 
 ## Phase 0: プロジェクト初期化（半日）
 
-- [ ] `create-next-app` 相当のセットアップ（TypeScript / App Router / Tailwind / ESLint）を既存の骨組みにマージ
-- [ ] package.json の依存を解決し `npm install` が通る
-- [ ] `src/lib/env.ts` を実装（全環境変数をZodで一元検証、ビルド時はSKIP可能な遅延評価）
-- [ ] docker compose で Postgres 起動 → `prisma migrate dev --name init` で初回マイグレーション作成
-- [ ] 既存の `tests/cache-key.test.ts` がパスする
+- [x] `create-next-app` 相当のセットアップ（TypeScript / App Router / Tailwind / ESLint）を既存の骨組みにマージ
+- [x] package.json の依存を解決し `npm install` が通る
+- [x] `src/lib/env.ts` を実装（全環境変数をZodで一元検証、ビルド時はSKIP可能な遅延評価）
+- [x] docker compose で Postgres 起動 → `prisma migrate dev --name init` で初回マイグレーション作成
+- [x] 既存の `tests/cache-key.test.ts` がパスする
 
 **DoD**: `npm run type-check && npm run lint && npm run test && npm run build` がすべて成功。CIが緑。
 

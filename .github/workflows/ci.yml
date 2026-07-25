@@ -32,6 +32,11 @@ jobs:
         run: npm run type-check
       - name: Prisma schema validate
         run: npx prisma validate
+        env:
+          # validate はスキーマの静的検証のみでDBへ接続しないが、
+          # datasource の env() 参照が解決できないとP1012になるためダミー値を渡す
+          DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+          DIRECT_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
       # テストは外部シークレット無しで動くこと（実APIを叩くテストは書かない）
       - name: Test
         run: npm run test

@@ -7,6 +7,7 @@ import { fetchReleases, fetchRepository, GitHubRateLimitError } from '@/lib/gith
 import type { Release } from '@/lib/github/schemas';
 import { favoriteTargetSchema } from '@/lib/favorite-input';
 import { FavoriteToggle } from '@/components/features/favorites/favorite-toggle';
+import { ReleaseSummary } from '@/components/features/releases/release-summary';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Notice } from '@/components/ui/notice';
 import { formatCompactNumber, formatDateJa } from '@/lib/format';
@@ -141,9 +142,16 @@ export default async function RepoDetailPage({ params }: { params: Params }) {
                   )}
                 </div>
                 {release.body && (
-                  <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-gray-600">
-                    {release.body}
-                  </p>
+                  <>
+                    <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-gray-600">
+                      {release.body}
+                    </p>
+                    <ReleaseSummary
+                      owner={repo.owner.login}
+                      name={repo.name}
+                      tagName={release.tag_name}
+                    />
+                  </>
                 )}
               </li>
             ))}

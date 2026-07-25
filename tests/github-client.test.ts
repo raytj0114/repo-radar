@@ -185,6 +185,24 @@ describe('fetchReleases', () => {
   });
 });
 
+describe('fetchReleaseByTag', () => {
+  it('タグ名をURLエンコードして1件取得する', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(releasesFixture[0]));
+    const release = await client.fetchReleaseByTag('vercel', 'next.js', 'v16.2.0+build/1');
+    expect(release?.tag_name).toBe('v16.2.0');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/vercel/next.js/releases/tags/v16.2.0%2Bbuild%2F1'
+    );
+  });
+
+  it('404は想定内としてnullを返す', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse({ message: 'Not Found' }, { status: 404 }));
+    await expect(client.fetchReleaseByTag('a', 'b', 'v9.9.9')).resolves.toBeNull();
+  });
+});
+
 describe('searchTrendingRepositories', () => {
   it('言語と作成日の条件からクエリを組み立て、結果をスキーマ検証して返す', async () => {
     const client = await importClient();

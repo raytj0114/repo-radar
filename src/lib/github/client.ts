@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { env } from '@/lib/env';
 import {
   releaseListSchema,
+  releaseSchema,
   repositorySchema,
   searchRepositoriesSchema,
   type Release,
@@ -162,6 +163,19 @@ export async function fetchReleases(owner: string, repo: string): Promise<Releas
     url = nextPageUrl(res.headers.get('link'));
   }
   return releases.filter((release) => !release.draft);
+}
+
+/** タグ名指定でリリースを1件取得。404（タグ消滅・リポジトリ消滅）は想定内としてnullを返す */
+export async function fetchReleaseByTag(
+  owner: string,
+  repo: string,
+  tagName: string
+): Promise<Release | null> {
+  const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/tags/${encodeURIComponent(tagName)}`;
+  const res = await githubFetch(path, REVALIDATE_SECONDS.releases);
+  if (res.status === 404) return null;
+  if (!res.ok) await raiseForStatus(res, `GET ${path}`);
+  return parseWith(releaseSchema, await res.json(), `GET ${path}`);
 }
 
 /**

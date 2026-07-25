@@ -47,11 +47,11 @@
 
 ## Phase 4: AI要約（1日）
 
-- [ ] `src/lib/gemini/client.ts`（リトライ・フォールバックモデル付き）
-- [ ] リリース要約のServer Action:
+- [x] `src/lib/gemini/client.ts`（リトライ・フォールバックモデル付き）
+- [x] リリース要約のServer Action:
       キャッシュ確認 → ミス時のみリリースノートをサーバーで取得しGemini呼び出し → `ReleaseSummary` に保存
-- [ ] クライアントから再生成フラグを受け取らないこと（CLAUDE.md不変条件2）
-- [ ] cacheKey生成とキャッシュ判定ロジックのユニットテスト
+- [x] クライアントから再生成フラグを受け取らないこと（CLAUDE.md不変条件2）
+- [x] cacheKey生成とキャッシュ判定ロジックのユニットテスト
 
 **DoD**: 同じリリースを複数回/複数ユーザーで開いてもGemini呼び出しが1回であることをログで確認。
 

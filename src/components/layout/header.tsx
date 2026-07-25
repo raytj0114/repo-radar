@@ -20,6 +20,9 @@ export async function Header() {
               <Link href="/trending" className="hover:text-gray-900">
                 トレンド
               </Link>
+              <Link href="/digest" className="hover:text-gray-900">
+                ダイジェスト
+              </Link>
             </nav>
           )}
         </div>

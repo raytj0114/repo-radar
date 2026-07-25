@@ -57,10 +57,10 @@
 
 ## Phase 5: デイリーダイジェスト + Cron（1日）
 
-- [ ] `/api/cron/digest`（`CRON_SECRET` をBearer検証）
-- [ ] お気に入り横断の当日分ダイジェスト生成 → `DailyDigest` 保存
-- [ ] `/digest` 画面（当日 + 過去分の閲覧）
-- [ ] `vercel.json` にCron定義を追加
+- [x] `/api/cron/digest`（`CRON_SECRET` をBearer検証）
+- [x] お気に入り横断の当日分ダイジェスト生成 → `DailyDigest` 保存
+- [x] `/digest` 画面（当日 + 過去分の閲覧）
+- [x] `vercel.json` にCron定義を追加
 
 **DoD**: ローカルでcronエンドポイントを手動実行してダイジェストが生成・表示される。
 

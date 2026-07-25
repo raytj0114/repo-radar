@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReleaseSummaryPrompt } from '@/lib/gemini/prompts';
+import { buildDailyDigestPrompt, buildReleaseSummaryPrompt } from '@/lib/gemini/prompts';
 
 const base = {
   fullName: 'vercel/next.js',
@@ -34,5 +34,40 @@ describe('buildReleaseSummaryPrompt', () => {
     const prompt = buildReleaseSummaryPrompt({ ...base, body: 'short body' });
     expect(prompt).toContain('short body');
     expect(prompt).not.toContain('...(以下省略)');
+  });
+});
+
+describe('buildDailyDigestPrompt', () => {
+  const entry = {
+    fullName: 'vercel/next.js',
+    tagName: 'v16.2.0',
+    name: 'v16.2.0',
+    body: '- Fixed a bug',
+  };
+
+  it('日付と各リリースのセクションを含む', () => {
+    const prompt = buildDailyDigestPrompt({ date: '2026-07-25', entries: [entry] });
+    expect(prompt).toContain('2026-07-25');
+    expect(prompt).toContain('### vercel/next.js v16.2.0 (v16.2.0)');
+    expect(prompt).toContain('- Fixed a bug');
+  });
+
+  it('エントリは20件で打ち切る', () => {
+    const entries = Array.from({ length: 30 }, (_, i) => ({
+      ...entry,
+      tagName: `v${i}.0.0`,
+    }));
+    const prompt = buildDailyDigestPrompt({ date: '2026-07-25', entries });
+    expect(prompt).toContain('(v19.0.0)');
+    expect(prompt).not.toContain('(v20.0.0)');
+  });
+
+  it('各エントリの本文は1500文字で打ち切る', () => {
+    const prompt = buildDailyDigestPrompt({
+      date: '2026-07-25',
+      entries: [{ ...entry, body: 'a'.repeat(2000) }],
+    });
+    expect(prompt).toContain('...(以下省略)');
+    expect(prompt).not.toContain('a'.repeat(1501));
   });
 });

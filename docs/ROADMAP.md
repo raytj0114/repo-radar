@@ -66,10 +66,10 @@
 
 ## Phase 6: 運用仕上げ（半日）
 
-- [ ] Vercelプロジェクト作成、環境変数設定、Supabase接続
-- [ ] GitHub Actions `migrate.yml` 用のシークレット設定、本番へ `migrate deploy`
-- [ ] READMEのセットアップ手順を実環境で検証（クリーンな環境で再現できるか）
-- [ ] rate-limit残量が閾値以下のときの縮退動作の確認
+- [x] Vercelプロジェクト作成、環境変数設定、Supabase接続
+- [x] GitHub Actions `migrate.yml` 用のシークレット設定、本番へ `migrate deploy`
+- [x] READMEのセットアップ手順を実環境で検証（クリーンな環境で再現できるか）
+- [x] rate-limit残量が閾値以下のときの縮退動作の確認
 
 **DoD**: 本番URLで全機能が動作。mainへのpushだけでアプリ+スキーマが更新される。
 

@@ -2,15 +2,15 @@
 
 お気に入りGitHubリポジトリのリリース・トレンドを追跡し、AIがリリースノートを日本語要約するWebアプリ。
 
-> **状態**: スキャフォールド段階。実装は `docs/ROADMAP.md` の順に進める。
+> **状態**: Phase 0〜5 実装済み（認証 / GitHub API層 / コア画面 / AI要約 / デイリーダイジェスト）。残りは `docs/ROADMAP.md` の Phase 6（運用仕上げ）。
 
 ## ドキュメント
 
-| ファイル | 内容 |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 設計・データフロー・セキュリティ規約 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 実装フェーズと完了条件 |
-| [CLAUDE.md](CLAUDE.md) | Claude Code向けの開発ルール（不変条件） |
+| ファイル                                     | 内容                                    |
+| -------------------------------------------- | --------------------------------------- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 設計・データフロー・セキュリティ規約    |
+| [docs/ROADMAP.md](docs/ROADMAP.md)           | 実装フェーズと完了条件                  |
+| [CLAUDE.md](CLAUDE.md)                       | Claude Code向けの開発ルール（不変条件） |
 
 ## セットアップ
 
@@ -19,8 +19,9 @@
 npm install
 
 # 2. 環境変数
-cp .env.example .env.local
-# .env.local を編集（各値の入手先はファイル内コメント参照）
+cp .env.example .env
+# .env を編集（各値の入手先はファイル内コメント参照）
+# 注: Next.jsは .env.local も読むが、Prisma CLI（migrate等）は .env しか読まないため .env を推奨
 
 # 3. DB起動 + マイグレーション
 docker compose up -d

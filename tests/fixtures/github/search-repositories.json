@@ -1,0 +1,40 @@
+{
+  "total_count": 4521,
+  "incomplete_results": false,
+  "items": [
+    {
+      "id": 998877661,
+      "name": "fastcache",
+      "full_name": "octocat/fastcache",
+      "owner": {
+        "login": "octocat",
+        "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
+      },
+      "html_url": "https://github.com/octocat/fastcache",
+      "description": "Blazing fast cache layer",
+      "language": "TypeScript",
+      "stargazers_count": 8421,
+      "forks_count": 210,
+      "open_issues_count": 12,
+      "score": 1.0,
+      "pushed_at": "2026-07-23T12:00:00Z"
+    },
+    {
+      "id": 998877662,
+      "name": "nolang",
+      "full_name": "octocat/nolang",
+      "owner": {
+        "login": "octocat",
+        "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
+      },
+      "html_url": "https://github.com/octocat/nolang",
+      "description": null,
+      "language": null,
+      "stargazers_count": 3120,
+      "forks_count": 45,
+      "open_issues_count": 3,
+      "score": 0.9,
+      "pushed_at": null
+    }
+  ]
+}

@@ -28,10 +28,10 @@
 
 ## Phase 2: GitHub APIクライアント層（1日）
 
-- [ ] `src/lib/github/client.ts`: PAT認証fetch、`next.revalidate`、rate-limitヘッダ監視、エラーの丸め
-- [ ] `src/lib/github/schemas.ts`: リポジトリ / リリース / 検索結果のZodスキーマ
-- [ ] リリース一覧・リポジトリ詳細・トレンド検索の3関数
-- [ ] スキーマのユニットテスト（実APIを叩かない。fixtureのJSONで検証）
+- [x] `src/lib/github/client.ts`: PAT認証fetch、`next.revalidate`、rate-limitヘッダ監視、エラーの丸め
+- [x] `src/lib/github/schemas.ts`: リポジトリ / リリース / 検索結果のZodスキーマ
+- [x] リリース一覧・リポジトリ詳細・トレンド検索の3関数
+- [x] スキーマのユニットテスト（実APIを叩かない。fixtureのJSONで検証）
 
 **DoD**: テストで3スキーマの正常系/異常系が検証されている。実装はモック/fixtureのみでテスト可能。
 

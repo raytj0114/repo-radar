@@ -8,15 +8,15 @@
 
 ## 技術スタック
 
-| 領域 | 選定 | 備考 |
-|---|---|---|
-| フレームワーク | Next.js (App Router) | Server Components中心 |
-| 認証 | Auth.js (next-auth v5) + GitHub OAuth | JWT戦略。GitHubログイン=題材と一致 |
-| DB | PostgreSQL (ローカル: Docker / 本番: Supabase) | Prisma + migrate運用 |
-| 外部API | GitHub REST API | サーバーPATで5,000req/h |
-| AI | Gemini API | キャッシュ経由のみ |
-| 状態管理 | TanStack Query + Zustand | football-trackerと同構成 |
-| テスト | Vitest + Testing Library | passWithNoTests: false |
+| 領域           | 選定                                           | 備考                               |
+| -------------- | ---------------------------------------------- | ---------------------------------- |
+| フレームワーク | Next.js (App Router)                           | Server Components中心              |
+| 認証           | Auth.js (next-auth v5) + GitHub OAuth          | JWT戦略。GitHubログイン=題材と一致 |
+| DB             | PostgreSQL (ローカル: Docker / 本番: Supabase) | Prisma + migrate運用               |
+| 外部API        | GitHub REST API                                | サーバーPATで5,000req/h            |
+| AI             | Gemini API                                     | キャッシュ経由のみ                 |
+| 状態管理       | TanStack Query + Zustand                       | football-trackerと同構成           |
+| テスト         | Vitest + Testing Library                       | passWithNoTests: false             |
 
 ## ディレクトリ構成（計画）
 
@@ -68,10 +68,10 @@ Next.js サーバー
 
 ## AIコスト設計（最重要）
 
-| コンテンツ | cacheKey | TTL | 生成トリガー |
-|---|---|---|---|
-| リリース要約 | `owner/repo@tagName` | なし（リリースは不変） | 詳細画面の初回表示時にサーバー側で生成 |
-| デイリーダイジェスト | `digest:YYYY-MM-DD:userId` | なし | Vercel Cron（または初回アクセス時） |
+| コンテンツ           | cacheKey                   | TTL                    | 生成トリガー                           |
+| -------------------- | -------------------------- | ---------------------- | -------------------------------------- |
+| リリース要約         | `owner/repo@tagName`       | なし（リリースは不変） | 詳細画面の初回表示時にサーバー側で生成 |
+| デイリーダイジェスト | `digest:YYYY-MM-DD:userId` | なし                   | Vercel Cron（または初回アクセス時）    |
 
 原則: **AI呼び出し回数 = 新規コンテンツ数**。同じリリースを何人が見ても生成は1回。
 再生成が必要な場合（プロンプト改善時など）は管理者操作としてのみ実装し、クライアントに再生成フラグを渡さない。
@@ -88,7 +88,9 @@ Next.js サーバー
 
 - Server Actionは冒頭で `await auth()` を検証。未認証は即エラー
 - 公開エンドポイント一覧（ここに無いものは全て認証必須）:
-  - `GET /api/auth/*` （Auth.js）
+  - `GET/POST /api/auth/*` （Auth.js。CSRF検証はAuth.js内蔵）
+  - `/login` のsignIn Server Action（GitHub OAuthへのリダイレクトのみ。実処理はAuth.js側）
+  - ヘッダーのsignOut Server Action（自セッションの破棄のみで副作用なし）
   - `GET /api/cron/digest` （`Authorization: Bearer ${CRON_SECRET}` を検証）
 - 上流APIのエラー本文をクライアントへ透過しない（汎用メッセージに丸め、詳細はサーバーログ）
 - LLMプロンプトへの入力はサーバーで取得したデータのみ

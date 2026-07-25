@@ -19,10 +19,10 @@
 
 ## Phase 1: 認証（半日）
 
-- [ ] Auth.js v5 + GitHub OAuth（JWT戦略、PrismaAdapterはUser/Accountのみ）
-- [ ] `/login` ページ、ヘッダーのユーザーメニュー
-- [ ] 認証ガードのヘルパー（`requireSession()`）を `src/lib/` に作り、以後の全Server Actionで使用
-- [ ] `requireSession` のユニットテスト
+- [x] Auth.js v5 + GitHub OAuth（JWT戦略、PrismaAdapterはUser/Accountのみ）
+- [x] `/login` ページ、ヘッダーのユーザーメニュー
+- [x] 認証ガードのヘルパー（`requireSession()`）を `src/lib/` に作り、以後の全Server Actionで使用
+- [x] `requireSession` のユニットテスト
 
 **DoD**: GitHubログイン/ログアウトが動作。未認証でServer Actionを呼ぶとエラー。
 

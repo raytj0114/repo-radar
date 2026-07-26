@@ -1,0 +1,54 @@
+{
+  "total_count": 3,
+  "incomplete_results": false,
+  "items": [
+    {
+      "id": 5001,
+      "name": "observability-dashboard-toolkit",
+      "full_name": "octocat/observability-dashboard-toolkit",
+      "owner": {
+        "login": "octocat",
+        "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
+      },
+      "html_url": "https://github.com/octocat/observability-dashboard-toolkit",
+      "description": "メトリクス・ログ・トレースを1画面にまとめるダッシュボードのツールキット。長い説明文が375px幅で折り返されずに省略されることを確認するための行です。",
+      "language": "TypeScript",
+      "stargazers_count": 18420,
+      "forks_count": 932,
+      "open_issues_count": 87,
+      "pushed_at": "2026-07-25T12:00:00Z"
+    },
+    {
+      "id": 5002,
+      "name": "ferris-stream-processor",
+      "full_name": "octocat/ferris-stream-processor",
+      "owner": {
+        "login": "octocat",
+        "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
+      },
+      "html_url": "https://github.com/octocat/ferris-stream-processor",
+      "description": "Rust製の軽量ストリーム処理エンジン",
+      "language": "Rust",
+      "stargazers_count": 9310,
+      "forks_count": 214,
+      "open_issues_count": 31,
+      "pushed_at": "2026-07-24T08:00:00Z"
+    },
+    {
+      "id": 5003,
+      "name": "nolang",
+      "full_name": "octocat/nolang",
+      "owner": {
+        "login": "octocat",
+        "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
+      },
+      "html_url": "https://github.com/octocat/nolang",
+      "description": null,
+      "language": null,
+      "stargazers_count": 1204,
+      "forks_count": 18,
+      "open_issues_count": 3,
+      "pushed_at": "2026-07-22T05:00:00Z"
+    }
+  ]
+}

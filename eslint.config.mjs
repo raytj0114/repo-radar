@@ -16,6 +16,14 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // PlaywrightのfixtureはテストへFixtureを引き渡すコールバックを `use` と名付ける規約だが、
+    // これはReactの `use` フックではない。E2EにReact Hooksのルールを適用しない
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

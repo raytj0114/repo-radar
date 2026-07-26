@@ -63,9 +63,26 @@ jobs:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     needs: [checks]
+    # 認証必須画面のE2Eは実DBを引く（Issue #16）。ローカルの docker compose と同じ構成にそろえる
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: repo_radar_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       # SKIP_ENV_VALIDATION経路（src/lib/env.ts）でzod検証をスキップしつつ、
-      # build→startを通すための構文的に妥当なダミー値を渡す（外部API/DBには接続しない）
+      # build→startを通すための構文的に妥当なダミー値を渡す（外部APIには接続しない）。
+      # AUTH_SECRET / GITHUB_API_BASE_URL / DATABASE_URL は playwright.config.ts の
+      # webServer.env が上書きするため、ここの値はビルド前段を通すためだけのもの
       SKIP_ENV_VALIDATION: 'true'
       GITHUB_API_TOKEN: e2e-dummy-token
       AUTH_SECRET: e2e-dummy-auth-secret
@@ -75,6 +92,8 @@ jobs:
       CRON_SECRET: e2e-dummy-cron-secret
       DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
       DIRECT_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+      # e2e/constants.ts が読む接続先。マイグレーション・シード・アプリ起動の全てで使う
+      E2E_DATABASE_URL: 'postgresql://postgres:password@localhost:5432/repo_radar_e2e'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

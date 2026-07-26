@@ -55,7 +55,11 @@ src/
 └── types/
 
 tests/                       # Vitest（純粋関数・Server Action・コンポーネント）
-e2e/                         # Playwright（認証不要ページのスモーク / 横スクロール検知）
+e2e/                         # Playwright（下記「E2Eの方針」参照）
+├── constants.ts             # ポート・E2E用シークレット・シードデータの唯一の出所
+├── fixtures.ts              # 認証済みテスト拡張 / 外部通信ガード / 共通アサーション
+├── global-setup.ts          # E2E専用DBの migrate deploy とシード
+└── mock-github/             # GitHub REST APIのモックサーバーと応答データ
 ```
 
 ## データフロー
@@ -106,6 +110,38 @@ Next.js サーバー
 - JWT戦略のため `Session` / `VerificationToken` テーブルは持たない
 - `ReleaseSummary` はTTL無し・`cacheKey` unique
 - スキーマ変更は必ず `prisma migrate dev`（履歴を残す）
+
+## E2Eの方針
+
+`npm run e2e` は `build → start` した本番相当の成果物（3100番）に対して Playwright を
+mobile(375px) / desktop の2プロファイルで実行する。認証必須画面もカバー対象（Issue #16）。
+
+**外部APIは一切叩かない。** 認証必須画面のデータ取得はServer Component / Server Actionからの
+サーバー側fetchであり、Playwrightの `page.route()` では捕まえられないため、次の3点で担保する。
+
+| 対象           | 方針                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| GitHub API     | `GITHUB_API_BASE_URL` を `e2e/mock-github/server.mjs`（3101番）へ向ける                      |
+| Gemini API     | AI要約はボタン押下でのみ発火するため、スモークでは押さない                                   |
+| アバター画像等 | `/_next/image` と `/_vercel/*` をブラウザ側でスタブし、`next/image` のサーバー側取得を止める |
+
+加えて `e2e/fixtures.ts` が **localhost以外へのリクエストを検出したらテストを落とす**ガードを
+全テストに掛けており、回帰で外部通信が復活したら気づけるようにしている。
+
+### 認証（セッションの作り方）
+
+`next-auth/jwt` の `encode` でセッションJWTを署名し、`authjs.session-token` Cookie を
+Playwrightから注入する。**アプリコードに認証バイパスの分岐は一切追加しない**（不変条件1）。
+
+署名鍵は `e2e/constants.ts` の `E2E_AUTH_SECRET` を `playwright.config.ts` の
+`webServer.env` でサーバーへ渡して一致させる。Next.jsは既に `process.env` にある値を
+`.env.local` で上書きしないため、ローカルでもCIでも同じ鍵になる。
+
+### DB
+
+開発用DBを汚さないよう、E2Eは専用DB（既定 `repo_radar_e2e`、`E2E_DATABASE_URL` で変更可）を使う。
+`e2e/global-setup.ts` が `prisma migrate deploy` を実行し、テストが期待する固定データを投入する。
+CIは e2e ジョブの `services.postgres` が同じ構成のDBを立てる。
 
 ## デプロイ
 

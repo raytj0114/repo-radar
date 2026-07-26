@@ -1,0 +1,16 @@
+{
+  "id": 70107786,
+  "name": "next.js",
+  "full_name": "vercel/next.js",
+  "owner": {
+    "login": "vercel",
+    "avatar_url": "https://avatars.githubusercontent.com/u/14985020?v=4"
+  },
+  "html_url": "https://github.com/vercel/next.js",
+  "description": "The React Framework for the Web. Used by some of the world's largest companies, Next.js enables you to create full-stack web applications.",
+  "language": "TypeScript",
+  "stargazers_count": 128432,
+  "forks_count": 27310,
+  "open_issues_count": 2841,
+  "pushed_at": "2026-07-20T09:00:00Z"
+}

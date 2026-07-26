@@ -13,7 +13,7 @@ import {
 // GitHub REST APIクライアント（規約は .claude/skills/github-api-patterns/SKILL.md）。
 // サーバー側PATで認証する。ユーザーのOAuthトークンは使わない。
 
-const BASE_URL = 'https://api.github.com';
+const DEFAULT_BASE_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const PER_PAGE = 100;
 
@@ -60,6 +60,15 @@ function resourceForUrl(url: string): RateLimitResource {
   return new URL(url).pathname.startsWith('/search/') ? 'search' : 'core';
 }
 
+/**
+ * リクエスト先のベースURL。既定は公開GitHubで、`GITHUB_API_BASE_URL` で差し替えられる
+ * （E2Eのモックサーバー / GitHub Enterprise 向け）。
+ * SKIP_ENV_VALIDATION経路ではzodの既定値が効かないため、空文字も未設定として扱う。
+ */
+function resolveBaseUrl(): string {
+  return (env.GITHUB_API_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
+}
+
 function trackRateLimit(res: Response, fallbackResource: RateLimitResource): void {
   const header = res.headers.get('x-ratelimit-remaining');
   if (header === null) return;
@@ -75,7 +84,8 @@ function trackRateLimit(res: Response, fallbackResource: RateLimitResource): voi
 }
 
 async function githubFetch(pathOrUrl: string, revalidate: number): Promise<Response> {
-  const url = pathOrUrl.startsWith(`${BASE_URL}/`) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
+  const baseUrl = resolveBaseUrl();
+  const url = pathOrUrl.startsWith(`${baseUrl}/`) ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
   const resource = resourceForUrl(url);
   const remaining = rateLimitRemaining.get(resource);
   if (remaining !== undefined && remaining < RATE_LIMIT_FLOORS[resource]) {

@@ -14,8 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.{ts,tsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,md}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.{ts,tsx}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.{ts,tsx}\" \"*.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,md}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.{ts,tsx}\" \"*.ts\""
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

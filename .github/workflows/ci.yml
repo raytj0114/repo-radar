@@ -58,3 +58,56 @@ jobs:
           SKIP_ENV_VALIDATION: 'true'
       # 注: ビルド成果物はアップロードしない。デプロイはVercel側で再ビルドされるため
       # ここでの目的は「ビルドが壊れていないことの検証」のみ。
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: [checks]
+    env:
+      # SKIP_ENV_VALIDATION経路（src/lib/env.ts）でzod検証をスキップしつつ、
+      # build→startを通すための構文的に妥当なダミー値を渡す（外部API/DBには接続しない）
+      SKIP_ENV_VALIDATION: 'true'
+      GITHUB_API_TOKEN: e2e-dummy-token
+      AUTH_SECRET: e2e-dummy-auth-secret
+      AUTH_GITHUB_ID: e2e-dummy-client-id
+      AUTH_GITHUB_SECRET: e2e-dummy-client-secret
+      GOOGLE_GEMINI_API_KEY: e2e-dummy-gemini-key
+      CRON_SECRET: e2e-dummy-cron-secret
+      DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+      DIRECT_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      # ブラウザ本体はキャッシュ済みでもOS共有ライブラリはランナーイメージ依存のため毎回確認する
+      - name: Install Playwright OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: E2E (build → start に対して実行)
+        run: npm run e2e
+      # 失敗時のtrace/スクリーンショットをランナー破棄後も調査できるようにする
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

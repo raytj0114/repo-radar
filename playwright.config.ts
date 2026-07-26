@@ -11,7 +11,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  // CIではgithubアノテーションに加え、失敗調査用にHTMLレポートも生成する（CI側でアーティファクトとしてアップロード）
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
     trace: 'on-first-retry',
@@ -30,12 +31,12 @@ export default defineConfig({
   },
   projects: [
     {
-      // iPhone相当（390px幅）。Chromiumのモバイルエミュレーションで代用し、
-      // CIで追加のブラウザエンジン（webkit）インストールを不要にする
+      // iPhone SE相当（375px幅、CLAUDE.md不変条件7に合わせる）。
+      // Chromiumのモバイルエミュレーションで代用し、CIで追加のブラウザエンジン（webkit）インストールを不要にする
       name: 'mobile',
       use: {
         ...devices['Desktop Chrome'],
-        viewport: { width: 390, height: 844 },
+        viewport: { width: 375, height: 667 },
         isMobile: true,
         hasTouch: true,
       },

@@ -9,6 +9,9 @@ import { navItems } from './nav-items';
 /** フォーカストラップの対象。パネル内にはリンクとボタンしか置かない */
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled])';
 
+/** Tailwindの`md`と同じ境界。これ以上の幅ではメニュー自体が非表示になる */
+const MD_MEDIA_QUERY = '(min-width: 768px)';
+
 /**
  * md未満で表示するハンバーガーメニュー。
  * ログアウトはServer Actionをpropsで受け取り、デスクトップと同じフォーム送信で実行する。
@@ -33,6 +36,17 @@ export function MobileNav({ signOutAction }: { signOutAction: () => Promise<void
     setOpen(false);
   }
 
+  // md以上になったらメニューを閉じる。CSSの`md:hidden`だけではopenがtrueのまま残り、
+  // 非表示サブツリーにフォーカスを戻そうとするキーハンドラがページ全体のTabを潰すため
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MD_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setOpen(false);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -46,6 +60,15 @@ export function MobileNav({ signOutAction }: { signOutAction: () => Promise<void
         return;
       }
       if (event.key !== 'Tab' || !panel) return;
+
+      // md以上ではパネルがCSSで非表示になっている。そこへフォーカスを戻すとfocus()が
+      // no-opになり、preventDefaultだけが残ってページ全体のTabを潰す。
+      // 上のmatchMediaリスナーで閉じるのが正規経路だが、changeイベントが届かない環境
+      // （親からリサイズされたiframe等）でも巻き込まないよう、ここでも取りこぼしを拾う
+      if (window.matchMedia(MD_MEDIA_QUERY).matches) {
+        setOpen(false);
+        return;
+      }
 
       const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
       if (focusable.length === 0) return;

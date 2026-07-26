@@ -1,6 +1,6 @@
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MobileNav } from '@/components/layout/mobile-nav';
 
@@ -17,7 +17,47 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-afterEach(cleanup);
+// jsdomのmatchMediaはメディアクエリを評価しないため、ビューポート変化を手で起こせる形に差し替える
+type MediaChangeListener = (event: MediaQueryListEvent) => void;
+const mediaChangeListeners = new Set<MediaChangeListener>();
+
+/** matchMediaが返す現在の評価結果。テストからビューポート幅の変化を模擬する */
+let mdMatches = false;
+
+/** md以上へリサイズされ、changeイベントも届いた状態にする */
+function resizeToDesktop() {
+  mdMatches = true;
+  act(() => {
+    for (const listener of mediaChangeListeners) {
+      listener({ matches: true } as MediaQueryListEvent);
+    }
+  });
+}
+
+/** md以上へリサイズされたがchangeイベントが届かない環境（親がリサイズするiframe等）を模擬する */
+function resizeToDesktopWithoutChangeEvent() {
+  mdMatches = true;
+}
+
+beforeEach(() => {
+  mdMatches = false;
+  mediaChangeListeners.clear();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return mdMatches;
+    },
+    media: query,
+    addEventListener: (_type: string, listener: MediaChangeListener) =>
+      mediaChangeListeners.add(listener),
+    removeEventListener: (_type: string, listener: MediaChangeListener) =>
+      mediaChangeListeners.delete(listener),
+  }));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const signOutAction = vi.fn(async () => {});
 
@@ -73,6 +113,30 @@ describe('MobileNav', () => {
 
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(last);
+  });
+
+  it('md以上へリサイズされたらメニューを閉じる', () => {
+    fireEvent.click(renderNav());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    resizeToDesktop();
+
+    // 開いたまま非表示になるとフォーカストラップがページ全体のTabを潰すため、状態も閉じる
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'メニューを開く' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+  });
+
+  it('changeイベントが届かなくてもmd以上ならTabを奪わずメニューを閉じる', () => {
+    fireEvent.click(renderNav());
+    resizeToDesktopWithoutChangeEvent();
+
+    // preventDefaultされるとブラウザ既定のフォーカス移動が消え、ページ全体のTabが死ぬ
+    const notCancelled = fireEvent.keyDown(document, { key: 'Tab' });
+    expect(notCancelled).toBe(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('リンクを押すとメニューを閉じる', () => {

@@ -27,6 +27,7 @@ Claudeが自律的に高品質な実装を行うためのルールを定義す�
    - `passWithNoTests` に頼らない（vitest設定でfalse固定）
 6. **変更は必ずブランチ + PR経由で行う。mainへの直接pushは禁止**
 7. **UI変更時は375px幅（モバイルビューポート）での表示確認をDoDに含める**
+   - 横スクロールの発生有無は `npm run e2e`（Playwright、375px/desktop）で自動検証する
 
 ## 品質原則
 
@@ -51,6 +52,7 @@ npm run type-check
 npm run lint
 npm run test
 npm run build
+npm run e2e   # UI変更時。build→startした成果物に対しPlaywrightを375px/desktopで実行
 npm run dev   # ブラウザで変更箇所を目視確認
 ```
 
@@ -77,6 +79,7 @@ npm run build            # プロダクションビルド
 npm run lint             # ESLint
 npm run type-check       # TypeScript検査
 npm run test             # Vitest（watchなし）
+npm run e2e              # Playwright E2E（自動でbuild→startして実行、3100番）
 npm run format           # Prettier
 npx prisma migrate dev   # マイグレーション作成+適用（ローカル）
 npx prisma studio        # DB GUI

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 3000;
+// dev（3000番）と衝突させないE2E専用ポート。
+// 開発サーバーが起動したままでも、E2Eは必ず自前でbuild→startした成果物を検証する
+const PORT = 3100;
 const baseURL = `http://localhost:${PORT}`;
 
 // build→startした本番相当サーバーに対してテストする（CLAUDE.md検証ループと同じ成果物を検証対象にするため）。
@@ -18,9 +20,12 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run build && npm run start',
+    command: `npm run build && npm run start -- --port ${PORT}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // 既存サーバーを再利用しない。再利用を許すと古い成果物に対してテストが通り、
+    // 「壊したのにE2Eが緑」という誤検証が起きる（DoDの「意図的に崩すと落ちる」が担保できない）。
+    // ポートが塞がっている場合はPlaywrightが起動エラーで落ちる＝安全側に倒れる
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       // next start (本番モード) はデフォルトでlocalhostを信頼しないため、

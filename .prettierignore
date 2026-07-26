@@ -1,0 +1,8 @@
+# Next.jsが自動生成するためフォーマット対象外（build毎に上書きされる）
+next-env.d.ts
+
+# 生成物
+.next/
+coverage/
+playwright-report/
+test-results/

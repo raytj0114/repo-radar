@@ -16,7 +16,8 @@
 | 外部API        | GitHub REST API                                | サーバーPATで5,000req/h            |
 | AI             | Gemini API                                     | キャッシュ経由のみ                 |
 | 状態管理       | TanStack Query + Zustand                       | football-trackerと同構成           |
-| テスト         | Vitest + Testing Library                       | passWithNoTests: false             |
+| テスト（単体） | Vitest + Testing Library                       | passWithNoTests: false             |
+| テスト（E2E）  | Playwright (Chromium)                          | 375px / desktop の2プロファイル    |
 
 ## ディレクトリ構成（計画）
 
@@ -52,6 +53,9 @@ src/
 │       └── prompts.ts       # 要約/ダイジェストのプロンプト
 ├── hooks/
 └── types/
+
+tests/                       # Vitest（純粋関数・Server Action・コンポーネント）
+e2e/                         # Playwright（認証不要ページのスモーク / 横スクロール検知）
 ```
 
 ## データフロー

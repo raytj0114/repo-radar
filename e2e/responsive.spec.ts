@@ -9,11 +9,16 @@ test.describe('横スクロール検知', () => {
       await page.goto(path);
 
       const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-        scrollWidth: document.body.scrollWidth,
+        // 溢れた要素がhtml/bodyどちらのスクロール幅に現れるかはCSS次第なので両方を見る
+        scrollWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        // 縦スクロールバー分を除いた実際の表示幅
         clientWidth: document.documentElement.clientWidth,
       }));
 
-      expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+      expect(
+        scrollWidth,
+        `横スクロールが発生している（scrollWidth=${scrollWidth} > clientWidth=${clientWidth}）`
+      ).toBeLessThanOrEqual(clientWidth);
     });
   }
 });

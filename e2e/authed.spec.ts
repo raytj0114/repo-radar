@@ -28,6 +28,24 @@ test.describe('ダッシュボード', () => {
 
     assertNoConsoleErrors();
   });
+
+  // ストリーミングは「初回レスポンスのHTMLに何がどの順で入っているか」で検証する。
+  // 描画タイミングを見る方式はモックが速いとすり抜けるため、バイト列の順序で確定的に判定する。
+  // スケルトンの目印は aria-label にする（aria-busy は loading.tsx 側にもあり区別できない）
+  test('シェルはリリース取得を待たずに先に送出される', async ({ page }) => {
+    const html = await (await page.request.get('/')).text();
+
+    const shellIndex = html.indexOf('<h1');
+    const skeletonIndex = html.indexOf('リリースを読み込み中');
+    const releaseIndex = html.indexOf('v16.2.0');
+
+    expect(shellIndex, 'シェルの見出しが初回HTMLに含まれていない').toBeGreaterThanOrEqual(0);
+    // 見出し（シェル）→ スケルトン（Suspenseフォールバック）→ 後追いのリリース本体、の順に届く
+    expect(skeletonIndex, 'Suspenseフォールバックが初回HTMLに含まれていない').toBeGreaterThan(
+      shellIndex
+    );
+    expect(releaseIndex, 'リリース本体がシェルより先に届いている').toBeGreaterThan(skeletonIndex);
+  });
 });
 
 test.describe('トレンド', () => {

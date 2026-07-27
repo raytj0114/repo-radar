@@ -220,6 +220,30 @@ describe('fetchReleases', () => {
     fetchMock.mockResolvedValue(fakeResponse({ message: 'Not Found' }, { status: 404 }));
     await expect(client.fetchReleases('gone', 'repo')).resolves.toBeNull();
   });
+
+  // ダッシュボードは1リポジトリ数件しか表示しないため、取得量を絞って呼ぶ（Issue #5）
+  it('perPage/maxPagesを指定すると取得量を絞る（rel="next"があっても辿らない）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(
+      fakeResponse(releasesFixture, {
+        headers: { link: '<https://api.github.com/repos/v/n/releases?page=2>; rel="next"' },
+      })
+    );
+    await client.fetchReleases('vercel', 'next.js', { perPage: 5, maxPages: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/vercel/next.js/releases?per_page=5'
+    );
+  });
+
+  it('perPageはGitHubの上限100に丸める', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(releasesFixture));
+    await client.fetchReleases('vercel', 'next.js', { perPage: 500, maxPages: 1 });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/vercel/next.js/releases?per_page=100'
+    );
+  });
 });
 
 describe('fetchReleaseByTag', () => {

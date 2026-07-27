@@ -105,6 +105,10 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   // `main` が可視になった時点＝コンテンツが本来の位置に置かれた時点で測る。
   // loading.tsx のフォールバックは main を持たないため、これはスケルトンにはマッチしない
   await expect(page.locator('main')).toBeVisible();
+  // ページ内Suspense（ダッシュボードのタイムライン等）はシェルより後に届く。
+  // スケルトンが残っている時点で測ると本来のコンテンツの溢れを見逃すため、
+  // 全スケルトン（aria-busy）が消えるまで待つ
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 
   const { scrollWidth, clientWidth } = await page.evaluate(() => ({
     // 溢れた要素がhtml/bodyどちらのスクロール幅に現れるかはCSS次第なので両方を見る

@@ -38,10 +38,20 @@ export const E2E_USER = {
  * シードするお気に入り。モックサーバーはowner/nameをURLから読んで応答を組み立てるため、
  * ここに何を並べてもリポジトリ詳細・ダッシュボードは成立する。
  * 2件目は「実在しうる長さ」のリポジトリ名で375px幅のtruncateを踏ませる。
+ * 10件あるのはダッシュボードのストリーミング（Issue #5 のDoD「お気に入り10件の状態」）を
+ * 実サイズで踏むため。1リポジトリ1リクエストなので増やしてもモックへの負荷は線形。
  */
 export const E2E_FAVORITES = [
   { owner: 'vercel', name: 'next.js' },
   { owner: 'octocat', name: 'observability-dashboard-toolkit' },
+  { owner: 'facebook', name: 'react' },
+  { owner: 'microsoft', name: 'typescript' },
+  { owner: 'prisma', name: 'prisma' },
+  { owner: 'vitest-dev', name: 'vitest' },
+  { owner: 'tailwindlabs', name: 'tailwindcss' },
+  { owner: 'colinhacks', name: 'zod' },
+  { owner: 'pmndrs', name: 'zustand' },
+  { owner: 'nextauthjs', name: 'next-auth' },
 ] as const;
 
 /**

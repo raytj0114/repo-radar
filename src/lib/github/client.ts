@@ -15,7 +15,6 @@ import {
 
 const DEFAULT_BASE_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
-const PER_PAGE = 100;
 
 // レート残量がこの値を下回ったら新規呼び出しを止め、明示的なエラーを返す。
 // GitHubのレート枠はリソース別（core: 5,000/h、search: 30/min）なので、
@@ -27,8 +26,14 @@ const RATE_LIMIT_FLOORS = {
 
 type RateLimitResource = keyof typeof RATE_LIMIT_FLOORS;
 
-// ページネーションの上限。リリースは最大3ページ（=300件）まで
-const MAX_RELEASE_PAGES = 3;
+/**
+ * リリース一覧の取得量の既定値。リポジトリ詳細は履歴を全件見せるため最大3ページ（=300件）辿る。
+ * 数件しか表示しない画面（ダッシュボード）は呼び出し側で `perPage` / `maxPages` を絞る。
+ */
+const RELEASE_FETCH_DEFAULTS = { perPage: 100, maxPages: 3 } as const;
+
+/** `per_page` のGitHub側上限 */
+const MAX_PER_PAGE = 100;
 
 const REVALIDATE_SECONDS = {
   releases: 300,
@@ -157,15 +162,33 @@ export async function fetchRepository(owner: string, repo: string): Promise<Repo
   return parseWith(repositorySchema, await res.json(), `GET ${path}`);
 }
 
+/** 取得量の指定。呼び出し側（サーバー）の定数のみで決める。クライアント入力は渡さない */
+export type ReleaseFetchOptions = {
+  /** 1ページあたりの取得件数。GitHubの上限100に丸める */
+  perPage?: number;
+  /** 辿る最大ページ数。用途ごとに必ず上限を持つ（規約: 無限に辿らない） */
+  maxPages?: number;
+};
+
 /**
  * リリース一覧（新しい順、draftは除外）。404は想定内としてnullを返す。
- * per_page=100で最大3ページまで `Link: rel="next"` を辿る。
+ * 既定は per_page=100 で最大3ページまで `Link: rel="next"` を辿る。
  */
-export async function fetchReleases(owner: string, repo: string): Promise<Release[] | null> {
+export async function fetchReleases(
+  owner: string,
+  repo: string,
+  options: ReleaseFetchOptions = {}
+): Promise<Release[] | null> {
+  // 呼び出し元はサーバー側の定数だが、上限・下限は関数側で閉じておく
+  const perPage = Math.max(
+    1,
+    Math.min(options.perPage ?? RELEASE_FETCH_DEFAULTS.perPage, MAX_PER_PAGE)
+  );
+  const maxPages = Math.max(1, options.maxPages ?? RELEASE_FETCH_DEFAULTS.maxPages);
   const basePath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases`;
   const releases: Release[] = [];
-  let url: string | null = `${basePath}?per_page=${PER_PAGE}`;
-  for (let page = 0; page < MAX_RELEASE_PAGES && url !== null; page++) {
+  let url: string | null = `${basePath}?per_page=${perPage}`;
+  for (let page = 0; page < maxPages && url !== null; page++) {
     const res: Response = await githubFetch(url, REVALIDATE_SECONDS.releases);
     if (res.status === 404) return null;
     if (!res.ok) await raiseForStatus(res, `GET ${basePath}`);

@@ -31,6 +31,18 @@ npx prisma migrate dev
 npm run dev
 ```
 
+## テスト
+
+```bash
+npm run test   # Vitest（外部依存なし）
+npm run e2e    # Playwright。自動でbuild→startして3100番に対して実行
+```
+
+E2Eは認証必須画面もカバーするため、**`docker compose up -d` でPostgreSQLが起動している必要がある**。
+開発用DBとは別の `repo_radar_e2e` を自動で作成・マイグレーションするので、開発中のデータは壊れない。
+GitHub APIはローカルのモックサーバーに差し替わるため、外部への通信は発生しない
+（詳細は `docs/ARCHITECTURE.md` の「E2Eの方針」）。
+
 ## Claude Codeでの開発
 
 ```bash

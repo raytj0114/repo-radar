@@ -3,10 +3,13 @@ import repositoryFixture from './fixtures/github/repository.json';
 import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
 
-// 実APIは叩かない。envとglobal fetchをモックする
-vi.mock('@/lib/env', () => ({
-  env: { GITHUB_API_TOKEN: 'test-token' },
-}));
+// 実APIは叩かない。envとglobal fetchをモックする。
+// `mock` 始まりの変数はvi.mockのファクトリから参照できる（vitestの巻き上げ規則）
+const mockEnv: { GITHUB_API_TOKEN: string; GITHUB_API_BASE_URL?: string } = {
+  GITHUB_API_TOKEN: 'test-token',
+};
+
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 type FakeResponseInit = {
   status?: number;
@@ -35,6 +38,7 @@ async function importClient() {
 }
 
 beforeEach(() => {
+  delete mockEnv.GITHUB_API_BASE_URL;
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -43,6 +47,39 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('ベースURL', () => {
+  it('GITHUB_API_BASE_URL 未設定なら公開GitHubを叩く', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(repositoryFixture));
+    await client.fetchRepository('vercel', 'next.js');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/repos/vercel/next.js');
+  });
+
+  it('GITHUB_API_BASE_URL があればそちらを叩く（E2Eのモックサーバー向け）', async () => {
+    mockEnv.GITHUB_API_BASE_URL = 'http://127.0.0.1:3101';
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(repositoryFixture));
+    await client.fetchRepository('vercel', 'next.js');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:3101/repos/vercel/next.js');
+  });
+
+  it('末尾のスラッシュは正規化する', async () => {
+    mockEnv.GITHUB_API_BASE_URL = 'http://127.0.0.1:3101/';
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(repositoryFixture));
+    await client.fetchRepository('vercel', 'next.js');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:3101/repos/vercel/next.js');
+  });
+
+  it('空文字は未設定として扱う（SKIP_ENV_VALIDATION経路ではzodの既定値が効かないため）', async () => {
+    mockEnv.GITHUB_API_BASE_URL = '';
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(repositoryFixture));
+    await client.fetchRepository('vercel', 'next.js');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/repos/vercel/next.js');
+  });
 });
 
 describe('fetchRepository', () => {

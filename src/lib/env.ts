@@ -7,6 +7,10 @@ const envSchema = z.object({
   // GitHub API（サーバー側PAT / read-only, public repos のみ）
   GITHUB_API_TOKEN: z.string().min(1),
 
+  // GitHub REST APIのベースURL。未設定なら公開GitHub（src/lib/github/client.ts の既定値）。
+  // E2Eではローカルのモックサーバーへ向けて外部通信を断つ（e2e/mock-github/server.mjs）
+  GITHUB_API_BASE_URL: z.string().url().optional(),
+
   // Auth.js (next-auth v5)
   AUTH_SECRET: z.string().min(1),
   AUTH_GITHUB_ID: z.string().min(1),

@@ -1,0 +1,32 @@
+[
+  {
+    "id": 901,
+    "tag_name": "v16.2.0",
+    "name": "v16.2.0",
+    "body": "## Core Changes\n\n- Turbopack: 大規模プロジェクトでの初回ビルドを約30%高速化しました\n- App Router: `revalidate` の指定がネストしたレイアウトへ正しく伝播するようになりました\n- next/image: リモート画像の最適化でCache-Controlを尊重するようになりました\n\n## Documentation Changes\n\n- キャッシュの章を書き直し、`fetch` のオプションと `revalidate` の関係を整理しました",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/vercel/next.js/releases/tag/v16.2.0",
+    "published_at": "2026-07-18T10:00:00Z"
+  },
+  {
+    "id": 902,
+    "tag_name": "v16.3.0-canary.1",
+    "name": null,
+    "body": "",
+    "draft": false,
+    "prerelease": true,
+    "html_url": "https://github.com/vercel/next.js/releases/tag/v16.3.0-canary.1",
+    "published_at": "2026-07-19T02:30:00Z"
+  },
+  {
+    "id": 903,
+    "tag_name": "v17.0.0-draft",
+    "name": "v17 (draft)",
+    "body": "",
+    "draft": true,
+    "prerelease": false,
+    "html_url": "https://github.com/vercel/next.js/releases/tag/v17.0.0-draft",
+    "published_at": null
+  }
+]

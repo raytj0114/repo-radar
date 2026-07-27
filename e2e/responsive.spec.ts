@@ -1,24 +1,43 @@
-import { test, expect } from '@playwright/test';
+import { anonTest, expect, expectNoHorizontalOverflow, test } from './fixtures';
+import { E2E_FAVORITES } from './constants';
 
-// 認証不要で到達できるページのみが対象（Issue #4 のスコープ）
+// 認証不要で到達できるページ
 const PUBLIC_PATHS = ['/login'];
 
-test.describe('横スクロール検知', () => {
+// 認証必須画面（Issue #16 でカバー範囲を拡張）
+const AUTHED_PATHS = [
+  '/',
+  '/trending',
+  '/trending?language=Rust',
+  '/digest',
+  `/repos/${E2E_FAVORITES[0].owner}/${E2E_FAVORITES[0].name}`,
+];
+
+anonTest.describe('横スクロール検知（未認証ページ）', () => {
   for (const path of PUBLIC_PATHS) {
-    test(`${path} で横スクロールが発生しない`, async ({ page }) => {
+    anonTest(`${path} で横スクロールが発生しない`, async ({ page }) => {
       await page.goto(path);
-
-      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-        // 溢れた要素がhtml/bodyどちらのスクロール幅に現れるかはCSS次第なので両方を見る
-        scrollWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-        // 縦スクロールバー分を除いた実際の表示幅
-        clientWidth: document.documentElement.clientWidth,
-      }));
-
-      expect(
-        scrollWidth,
-        `横スクロールが発生している（scrollWidth=${scrollWidth} > clientWidth=${clientWidth}）`
-      ).toBeLessThanOrEqual(clientWidth);
+      await expectNoHorizontalOverflow(page);
     });
   }
+});
+
+test.describe('横スクロール検知（認証必須画面）', () => {
+  for (const path of AUTHED_PATHS) {
+    test(`${path} で横スクロールが発生しない`, async ({ page }) => {
+      await page.goto(path);
+      await expectNoHorizontalOverflow(page);
+    });
+  }
+});
+
+test.describe('横スクロール検知（モバイルメニュー展開時）', () => {
+  test.skip(({ isMobile }) => !isMobile, 'モバイルプロファイル専用');
+
+  test('メニューを開いても横スクロールが発生しない', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'メニューを開く' }).click();
+    await expect(page.getByRole('dialog', { name: 'メニュー' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
 });

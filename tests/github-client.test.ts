@@ -244,6 +244,16 @@ describe('fetchReleases', () => {
       'https://api.github.com/repos/vercel/next.js/releases?per_page=100'
     );
   });
+
+  it('perPage/maxPagesが0以下でも最小値まで持ち上げる（取得なしにはしない）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(releasesFixture));
+    await client.fetchReleases('vercel', 'next.js', { perPage: 0, maxPages: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/vercel/next.js/releases?per_page=1'
+    );
+  });
 });
 
 describe('fetchReleaseByTag', () => {

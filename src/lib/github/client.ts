@@ -179,8 +179,12 @@ export async function fetchReleases(
   repo: string,
   options: ReleaseFetchOptions = {}
 ): Promise<Release[] | null> {
-  const perPage = Math.min(options.perPage ?? RELEASE_FETCH_DEFAULTS.perPage, MAX_PER_PAGE);
-  const maxPages = Math.max(options.maxPages ?? RELEASE_FETCH_DEFAULTS.maxPages, 1);
+  // 呼び出し元はサーバー側の定数だが、上限・下限は関数側で閉じておく
+  const perPage = Math.max(
+    1,
+    Math.min(options.perPage ?? RELEASE_FETCH_DEFAULTS.perPage, MAX_PER_PAGE)
+  );
+  const maxPages = Math.max(1, options.maxPages ?? RELEASE_FETCH_DEFAULTS.maxPages);
   const basePath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases`;
   const releases: Release[] = [];
   let url: string | null = `${basePath}?per_page=${perPage}`;

@@ -58,7 +58,9 @@ async function ReleaseFeed({ userId }: { userId: string }) {
   const settled = await Promise.allSettled(
     favorites.map(async (favorite) => ({
       favorite,
-      // 表示する分だけを1ページで取る。全件取得は履歴を見せるリポジトリ詳細のみ
+      // 表示する分だけを1ページで取る。全件取得は履歴を見せるリポジトリ詳細のみ。
+      // draftを除いた結果が5件未満になりうるが、draftはpush権限のあるトークンにしか
+      // 見えず、サーバー側PATは公開リポジトリの読み取り専用なので実質発生しない
       releases: await fetchReleases(favorite.owner, favorite.name, {
         perPage: RELEASES_PER_REPO,
         maxPages: 1,

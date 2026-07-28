@@ -23,13 +23,21 @@ const searchResult = readData('search-repositories.json');
 const port = Number(process.env.MOCK_GITHUB_PORT);
 /** このownerへのリクエストは404を返す（リポジトリ詳細の「見つかりません」経路の検証用） */
 const missingOwner = process.env.MOCK_GITHUB_MISSING_OWNER;
+/** `missingOwner` 配下でリリース取得だけ500を返すリポジトリ名（404時に失敗を捨てているかの検証用） */
+const failingReleasesName = process.env.MOCK_GITHUB_FAILING_RELEASES_NAME;
 /** このプレフィックスで始まるownerへのリクエストは遅延させ、時刻を記録する（並列取得の検証用） */
 const slowOwnerPrefix = process.env.MOCK_GITHUB_SLOW_OWNER_PREFIX;
 const slowMs = Number(process.env.MOCK_GITHUB_SLOW_MS);
 
-if (!Number.isInteger(port) || !missingOwner || !slowOwnerPrefix || !Number.isInteger(slowMs)) {
+if (
+  !Number.isInteger(port) ||
+  !missingOwner ||
+  !failingReleasesName ||
+  !slowOwnerPrefix ||
+  !Number.isInteger(slowMs)
+) {
   throw new Error(
-    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS を指定してください'
+    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS を指定してください'
   );
 }
 
@@ -114,6 +122,12 @@ function handle(req, res, url) {
   if (segments[0] === 'repos' && segments.length >= 3) {
     const [, owner, name, ...rest] = segments;
     if (owner === missingOwner) {
+      // リポジトリは404だがリリース取得だけが失敗する組み合わせ。
+      // 並列化後は404でもリリース取得が走るため、その失敗を捨てられているかの検証に使う
+      if (name === failingReleasesName && rest[0] === 'releases') {
+        send(res, 500, { message: 'Internal Server Error' });
+        return;
+      }
       notFound(res);
       return;
     }

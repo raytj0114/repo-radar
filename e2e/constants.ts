@@ -68,6 +68,13 @@ export const E2E_DIGEST = {
 export const MISSING_OWNER = 'missing';
 
 /**
+ * `MISSING_OWNER` 配下でリリース取得だけが500になるリポジトリ名。
+ * 並列化後は「リポジトリが404でもリリース取得は走る」ため、その失敗を捨てて
+ * 404表示になることを検証するために使う（Issue #6）。
+ */
+export const FAILING_RELEASES_NAME = 'releases-500';
+
+/**
  * 並列取得（Issue #6）の検証用。このプレフィックスで始まるownerへのリクエストに対し、
  * モックサーバーは応答を遅らせたうえで開始/終了時刻を記録し、`/__requests` で返す。
  * 遅延を入れるのは、直列と並列の差を「たまたま速かった」で埋もれさせないため。

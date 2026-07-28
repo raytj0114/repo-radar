@@ -2,6 +2,7 @@ import { anonTest, expect, test, watchConsoleErrors } from './fixtures';
 import {
   E2E_DIGEST,
   E2E_FAVORITES,
+  FAILING_RELEASES_NAME,
   MISSING_OWNER,
   MOCK_GITHUB_BASE_URL,
   SLOW_OWNER_PREFIX,
@@ -143,10 +144,28 @@ test.describe('リポジトリ詳細', () => {
 
     expect(repository, 'リポジトリメタのリクエストが記録されていない').toBeDefined();
     expect(releases, 'リリースのリクエストが記録されていない').toBeDefined();
+    // 画面が描画済み＝両方の応答をアプリが受け取った後なので endedAt は必ず埋まっている。
+    // 埋まっていないなら記録側の不具合であり、比較の前に切り分けられるようにする
+    expect(repository?.endedAt, 'リポジトリメタの応答完了が記録されていない').toEqual(
+      expect.any(Number)
+    );
     expect(
-      releases!.startedAt,
+      releases?.startedAt,
       'リリースの取得がリポジトリメタの応答完了後に始まっている（直列になっている）'
-    ).toBeLessThan(repository!.endedAt!);
+    ).toBeLessThan(repository?.endedAt ?? 0);
+  });
+
+  // 並列化により、リポジトリが404でもリリース取得は走ってしまう。その結果（ここでは500）を
+  // 捨てられず伝播させると、404表示ではなくエラー画面になる
+  test('リポジトリが404ならリリース取得の失敗は捨てて見つからない旨を表示する', async ({
+    page,
+  }) => {
+    const assertNoConsoleErrors = watchConsoleErrors(page);
+    await page.goto(`/repos/${MISSING_OWNER}/${FAILING_RELEASES_NAME}`);
+
+    await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
+
+    assertNoConsoleErrors();
   });
 });
 

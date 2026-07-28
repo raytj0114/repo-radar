@@ -23,10 +23,21 @@ const searchResult = readData('search-repositories.json');
 const port = Number(process.env.MOCK_GITHUB_PORT);
 /** このownerへのリクエストは404を返す（リポジトリ詳細の「見つかりません」経路の検証用） */
 const missingOwner = process.env.MOCK_GITHUB_MISSING_OWNER;
+/** このプレフィックスで始まるownerへのリクエストは遅延させ、時刻を記録する（並列取得の検証用） */
+const slowOwnerPrefix = process.env.MOCK_GITHUB_SLOW_OWNER_PREFIX;
+const slowMs = Number(process.env.MOCK_GITHUB_SLOW_MS);
 
-if (!Number.isInteger(port) || !missingOwner) {
-  throw new Error('MOCK_GITHUB_PORT と MOCK_GITHUB_MISSING_OWNER を指定してください');
+if (!Number.isInteger(port) || !missingOwner || !slowOwnerPrefix || !Number.isInteger(slowMs)) {
+  throw new Error(
+    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS を指定してください'
+  );
 }
+
+/**
+ * 遅延対象リクエストの `{ path, startedAt, endedAt }`。
+ * 遅延対象だけを記録するので、他のテストのリクエストで膨らんだり混ざったりしない。
+ */
+const requestLog = [];
 
 /** 実APIと同じくレート残量ヘッダを返す。E2Eではフロアに引っかからない十分な残量を報告する */
 function send(res, status, body, { resource = 'core' } = {}) {
@@ -69,13 +80,29 @@ function searchFor(query) {
   return { ...searchResult, total_count: items.length, items };
 }
 
-const server = createServer((req, res) => {
-  const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+/** `/repos/:owner/...` のownerが遅延対象か */
+function slowOwnerOf(segments) {
+  return segments[0] === 'repos' && segments[1]?.startsWith(slowOwnerPrefix) ? segments[1] : null;
+}
+
+function handle(req, res, url) {
   const segments = url.pathname.split('/').filter(Boolean);
 
   // webServerの起動待ち用。Playwrightは2xx/3xx/4xxの一部しか「起動済み」とみなさない
   if (url.pathname === '/healthz') {
     send(res, 200, { ok: true });
+    return;
+  }
+
+  // 遅延対象リクエストの記録。`?owner=` で自テストのぶんだけを取り出す
+  if (url.pathname === '/__requests') {
+    const owner = url.searchParams.get('owner');
+    const prefix = owner ? `/repos/${owner}/` : '/repos/';
+    send(
+      res,
+      200,
+      requestLog.filter((entry) => entry.path.startsWith(prefix))
+    );
     return;
   }
 
@@ -114,6 +141,25 @@ const server = createServer((req, res) => {
   }
 
   notFound(res);
+}
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+  const segments = url.pathname.split('/').filter(Boolean);
+
+  if (slowOwnerOf(segments) === null) {
+    handle(req, res, url);
+    return;
+  }
+
+  // 遅延対象: 応答を遅らせ、開始と終了（フラッシュ完了）の時刻を残す。
+  // 直列なら「2本目の開始 > 1本目の終了」、並列なら重なる
+  const entry = { path: url.pathname, startedAt: Date.now(), endedAt: null };
+  requestLog.push(entry);
+  res.on('finish', () => {
+    entry.endedAt = Date.now();
+  });
+  setTimeout(() => handle(req, res, url), slowMs);
 });
 
 server.listen(port, '127.0.0.1', () => {

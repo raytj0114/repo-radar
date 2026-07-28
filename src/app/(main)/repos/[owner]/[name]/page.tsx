@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import { CircleDot, GitFork, Star } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { fetchReleases, fetchRepository, GitHubRateLimitError } from '@/lib/github/client';
+import { fetchReleases, fetchRepository } from '@/lib/github/client';
+import { RATE_LIMITED, settle, unwrapSettled } from '@/lib/github/concurrent';
 import type { Release } from '@/lib/github/schemas';
 import { favoriteTargetSchema } from '@/lib/favorite-input';
 import { FavoriteToggle } from '@/components/features/favorites/favorite-toggle';
@@ -30,36 +31,33 @@ export default async function RepoDetailPage({ params }: { params: Params }) {
   }
   const { owner, name } = parsedParams.data;
 
-  let repo = null;
-  let releases: Release[] | null = null;
-  let rateLimited = false;
-  try {
-    repo = await fetchRepository(owner, name);
-    releases = repo ? await fetchReleases(owner, name) : null;
-  } catch (error) {
-    if (error instanceof GitHubRateLimitError) {
-      rateLimited = true;
-    } else {
-      throw error;
-    }
+  // リポジトリメタ・リリース一覧・お気に入り判定は互いに独立なので同時に投げる（Issue #6）。
+  // 直列だと待ち時間がそのまま加算される。リポジトリが404ならリリースの結果は使わないため、
+  // 例外を即座に伝播させず settle で受けておき、使う直前に unwrapSettled する
+  const [repoSettled, releasesSettled, favorite] = await Promise.all([
+    settle(fetchRepository(owner, name)),
+    settle(fetchReleases(owner, name)),
+    prisma.favoriteRepo.findUnique({
+      where: { userId_owner_name: { userId: session.user.id, owner, name } },
+      select: { id: true },
+    }),
+  ]);
+
+  const repo = unwrapSettled(repoSettled);
+  if (repo === RATE_LIMITED) {
+    return <RateLimitNotice />;
   }
 
-  if (rateLimited) {
-    return (
-      <main>
-        <Notice message="GitHub APIのレート上限に達したため、リポジトリ情報を取得できませんでした。しばらくすると回復します。" />
-      </main>
-    );
-  }
-
+  // 404（消滅・改名・private化）。並行して投げたリリースの結果は成功・失敗とも捨てる
   if (!repo) {
     return <RepoNotFound />;
   }
 
-  const favorite = await prisma.favoriteRepo.findUnique({
-    where: { userId_owner_name: { userId: session.user.id, owner, name } },
-    select: { id: true },
-  });
+  const releasesOrLimited = unwrapSettled(releasesSettled);
+  if (releasesOrLimited === RATE_LIMITED) {
+    return <RateLimitNotice />;
+  }
+  const releases: Release[] | null = releasesOrLimited;
 
   return (
     <main>
@@ -169,6 +167,14 @@ function MetaItem({ icon, label, value }: { icon: React.ReactNode; label: string
       <dt className="sr-only">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+function RateLimitNotice() {
+  return (
+    <main>
+      <Notice message="GitHub APIのレート上限に達したため、リポジトリ情報を取得できませんでした。しばらくすると回復します。" />
+    </main>
   );
 }
 

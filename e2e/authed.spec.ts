@@ -1,5 +1,11 @@
 import { anonTest, expect, test, watchConsoleErrors } from './fixtures';
-import { E2E_DIGEST, E2E_FAVORITES, MISSING_OWNER } from './constants';
+import {
+  E2E_DIGEST,
+  E2E_FAVORITES,
+  MISSING_OWNER,
+  MOCK_GITHUB_BASE_URL,
+  SLOW_OWNER_PREFIX,
+} from './constants';
 
 // 認証必須画面のスモーク（Issue #16）。
 // GitHub APIは e2e/mock-github/server.mjs に差し替わっており、DBは e2e/global-setup.ts が
@@ -116,6 +122,31 @@ test.describe('リポジトリ詳細', () => {
     await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
 
     assertNoConsoleErrors();
+  });
+
+  // 並列化（Issue #6）の回帰防止。直列に戻すと2本目の取得が1本目の応答後に始まるため落ちる。
+  // モックサーバー側で応答を SLOW_RESPONSE_MS 遅らせ、リクエストの開始・終了時刻で判定する
+  // （画面の表示時間で測る方式はマシンの速度に左右されるため使わない）。
+  // Nextのfetchキャッシュに当たると2回目以降リクエストが発生しないので、ownerは実行ごとに変える
+  test('リポジトリメタとリリースを同時に取得する', async ({ page, request }, testInfo) => {
+    const owner = `${SLOW_OWNER_PREFIX}-${testInfo.project.name}-${Date.now()}`;
+    const name = 'parallel-fetch';
+
+    await page.goto(`/repos/${owner}/${name}`);
+    await expect(page.getByRole('heading', { name: `${owner}/${name}`, level: 1 })).toBeVisible();
+
+    const log: { path: string; startedAt: number; endedAt: number | null }[] = await (
+      await request.get(`${MOCK_GITHUB_BASE_URL}/__requests?owner=${owner}`)
+    ).json();
+    const repository = log.find((entry) => entry.path === `/repos/${owner}/${name}`);
+    const releases = log.find((entry) => entry.path === `/repos/${owner}/${name}/releases`);
+
+    expect(repository, 'リポジトリメタのリクエストが記録されていない').toBeDefined();
+    expect(releases, 'リリースのリクエストが記録されていない').toBeDefined();
+    expect(
+      releases!.startedAt,
+      'リリースの取得がリポジトリメタの応答完了後に始まっている（直列になっている）'
+    ).toBeLessThan(repository!.endedAt!);
   });
 });
 

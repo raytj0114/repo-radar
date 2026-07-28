@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 import clsx from 'clsx';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { GitHubRateLimitError, searchTrendingRepositories } from '@/lib/github/client';
+import { searchTrendingRepositories } from '@/lib/github/client';
+import { RATE_LIMITED, settle, unwrapSettled } from '@/lib/github/concurrent';
 import type { SearchRepositoriesResult } from '@/lib/github/schemas';
 import { FavoriteToggle } from '@/components/features/favorites/favorite-toggle';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -36,23 +37,20 @@ export default async function TrendingPage({
 
   const createdAfter = trendWindowStart();
 
-  let result: SearchRepositoriesResult | null = null;
-  let rateLimited = false;
-  try {
-    result = await searchTrendingRepositories({ language, createdAfter });
-  } catch (error) {
-    if (error instanceof GitHubRateLimitError) {
-      rateLimited = true;
-    } else {
-      throw error;
-    }
-  }
-
-  const favorites = await prisma.favoriteRepo.findMany({
-    where: { userId: session.user.id },
-    select: { owner: true, name: true },
-  });
+  // GitHub検索とお気に入りの取得は互いに独立なので同時に投げる（Issue #6）。
+  // 検索が失敗しても favorites の取得を巻き込まないよう settle で包む
+  const [searchSettled, favorites] = await Promise.all([
+    settle(searchTrendingRepositories({ language, createdAfter })),
+    prisma.favoriteRepo.findMany({
+      where: { userId: session.user.id },
+      select: { owner: true, name: true },
+    }),
+  ]);
   const favoriteSet = new Set(favorites.map((f) => `${f.owner}/${f.name}`));
+
+  const searchResult = unwrapSettled(searchSettled);
+  const rateLimited = searchResult === RATE_LIMITED;
+  const result: SearchRepositoriesResult | null = rateLimited ? null : searchResult;
 
   return (
     <main>

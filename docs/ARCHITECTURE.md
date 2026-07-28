@@ -88,6 +88,8 @@ Next.js サーバー
 
 - 認証: サーバー側PAT（読み取り専用・publicのみのfine-grained token）
 - レート: 5,000req/h。`x-ratelimit-remaining` を監視し、閾値以下でGitHub呼び出しを控えキャッシュのみ返す
+  - 残量の観測はレスポンス受信時なので、**同時に投げた分はフロア判定をすり抜けうる**（ベストエフォート）。
+    並列数はページごとに定数で決め、ユーザー入力で増やせるようにしない
 - キャッシュ: Nextの `fetch` に `next: { revalidate }` を指定
   - リリース一覧: 300s / リポジトリメタ: 3600s / トレンド検索: 1800s
 - 取得量は画面の表示件数に合わせる（`fetchReleases` の `perPage` / `maxPages`）

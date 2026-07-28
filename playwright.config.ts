@@ -4,9 +4,12 @@ import {
   APP_PORT,
   E2E_AUTH_SECRET,
   E2E_DATABASE_URL,
+  FAILING_RELEASES_NAME,
   MISSING_OWNER,
   MOCK_GITHUB_BASE_URL,
   MOCK_GITHUB_PORT,
+  SLOW_OWNER_PREFIX,
+  SLOW_RESPONSE_MS,
 } from './e2e/constants';
 
 // build→startした本番相当サーバーに対してテストする（CLAUDE.md検証ループと同じ成果物を検証対象にするため）。
@@ -34,6 +37,9 @@ export default defineConfig({
       env: {
         MOCK_GITHUB_PORT: String(MOCK_GITHUB_PORT),
         MOCK_GITHUB_MISSING_OWNER: MISSING_OWNER,
+        MOCK_GITHUB_FAILING_RELEASES_NAME: FAILING_RELEASES_NAME,
+        MOCK_GITHUB_SLOW_OWNER_PREFIX: SLOW_OWNER_PREFIX,
+        MOCK_GITHUB_SLOW_MS: String(SLOW_RESPONSE_MS),
       },
     },
     {

@@ -28,16 +28,19 @@ const failingReleasesName = process.env.MOCK_GITHUB_FAILING_RELEASES_NAME;
 /** このプレフィックスで始まるownerへのリクエストは遅延させ、時刻を記録する（並列取得の検証用） */
 const slowOwnerPrefix = process.env.MOCK_GITHUB_SLOW_OWNER_PREFIX;
 const slowMs = Number(process.env.MOCK_GITHUB_SLOW_MS);
+/** このプレフィックスで始まるownerへの応答は残量フロア未満を報告する（縮退表示の検証用） */
+const rateLimitedOwnerPrefix = process.env.MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX;
 
 if (
   !Number.isInteger(port) ||
   !missingOwner ||
   !failingReleasesName ||
   !slowOwnerPrefix ||
-  !Number.isInteger(slowMs)
+  !Number.isInteger(slowMs) ||
+  !rateLimitedOwnerPrefix
 ) {
   throw new Error(
-    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS を指定してください'
+    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS / MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX を指定してください'
   );
 }
 
@@ -47,13 +50,22 @@ if (
  */
 const requestLog = [];
 
-/** 実APIと同じくレート残量ヘッダを返す。E2Eではフロアに引っかからない十分な残量を報告する */
-function send(res, status, body, { resource = 'core' } = {}) {
+/** リソース別の残量。既定は `src/lib/github/client.ts` のフロアに引っかからない十分な値 */
+const REMAINING = { core: '4999', search: '29' };
+
+/** フロア未満の残量。これを観測したアプリプロセスは以降そのプールの呼び出しを遮断する */
+const EXHAUSTED_REMAINING = '0';
+
+/**
+ * 実APIと同じくレート残量ヘッダを返す。既定はフロアに引っかからない十分な残量。
+ * `exhausted` を渡した応答だけがフロア未満を報告し、縮退表示の経路を踏ませる。
+ */
+function send(res, status, body, { resource = 'core', exhausted = false } = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
-    'x-ratelimit-remaining': resource === 'search' ? '29' : '4999',
+    'x-ratelimit-remaining': exhausted ? EXHAUSTED_REMAINING : REMAINING[resource],
     'x-ratelimit-resource': resource,
   });
   res.end(payload);
@@ -131,14 +143,18 @@ function handle(req, res, url) {
       notFound(res);
       return;
     }
+    // 応答自体は正常系のまま、残量だけをフロア未満で報告する。
+    // アプリは残量を「次の呼び出しの手前」で見るため、この応答を踏んだ時点ではまだ成功し、
+    // 以降のcore呼び出しが遮断される（Issue #23 / e2e/rate-limit.spec.ts）
+    const rateLimit = { exhausted: owner.startsWith(rateLimitedOwnerPrefix) };
     // GET /repos/:owner/:name
     if (rest.length === 0) {
-      send(res, 200, repositoryFor(owner, name));
+      send(res, 200, repositoryFor(owner, name), rateLimit);
       return;
     }
     // GET /repos/:owner/:name/releases （Linkヘッダを返さない＝1ページで打ち止め）
     if (rest.length === 1 && rest[0] === 'releases') {
-      send(res, 200, releasesFor(owner, name));
+      send(res, 200, releasesFor(owner, name), rateLimit);
       return;
     }
     // GET /repos/:owner/:name/releases/tags/:tag
@@ -149,7 +165,7 @@ function handle(req, res, url) {
         notFound(res);
         return;
       }
-      send(res, 200, release);
+      send(res, 200, release, rateLimit);
       return;
     }
   }

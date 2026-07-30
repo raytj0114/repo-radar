@@ -129,6 +129,8 @@ Next.js サーバー
 
 `npm run e2e` は `build → start` した本番相当の成果物（3100番）に対して Playwright を
 mobile(375px) / desktop の2プロファイルで実行する。認証必須画面もカバー対象（Issue #16）。
+CIの `E2E (Playwright)` ジョブは**必須status check**であり、赤いままmainへマージできない
+（→「デプロイ / 必須チェック（ブランチ保護）」）。
 
 **外部APIは一切叩かない。** 認証必須画面のデータ取得はServer Component / Server Actionからの
 サーバー側fetchであり、Playwrightの `page.route()` では捕まえられないため、次の3点で担保する。
@@ -178,3 +180,21 @@ ownerは実行ごとに一意にする（Nextのfetchキャッシュに当たる
 - マイグレーション: GitHub Actions `migrate.yml` が main への push 時に
   `prisma migrate deploy` を実行（`DIRECT_URL` を使用）
 - Cron: Vercel Cron → `/api/cron/digest`（`vercel.json` で定義、Phase 5で追加）
+
+### 必須チェック（ブランチ保護）
+
+main はルールセット `protect-main` で保護されており、PR必須 + non-fast-forward に加えて
+次の3つのstatus checkが**すべて成功するまでマージできない**（いずれも `.github/workflows/ci.yml` のジョブ名）。
+
+| context                   | ジョブ   | 主な守備範囲                                                                        |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `Lint / Typecheck / Test` | `checks` | ESLint・Prettier・型・Prismaスキーマ・ユニットテスト                                |
+| `Build`                   | `build`  | プロダクションビルド                                                                |
+| `E2E (Playwright)`        | `e2e`    | 375px横スクロール（不変条件7）・fetch並列化・認証必須画面のスモーク・外部通信ガード |
+
+`E2E (Playwright)` は 2026-07-30 に追加した（Issue #22）。ルールセットの作成が
+E2EジョブのCI追加（Issue #12）より前だったため必須チェックに入っておらず、
+E2Eだけが検知できる回帰がCI赤のままマージできる状態だった（docs/AUDIT-2026-07.md W1）。
+
+**ジョブ名を変えるときは必須チェックのcontext名も同時に更新する。**
+不一致になると「永遠に来ないチェック」を待ち続けてマージが恒久ブロックされる。

@@ -129,6 +129,8 @@ Next.js サーバー
 
 `npm run e2e` は `build → start` した本番相当の成果物（3100番）に対して Playwright を
 mobile(375px) / desktop の2プロファイルで実行する。認証必須画面もカバー対象（Issue #16）。
+CIの `E2E (Playwright)` ジョブは**必須status check**であり、赤いままmainへマージできない
+（→「デプロイ / 必須チェック（ブランチ保護）」）。
 
 **外部APIは一切叩かない。** 認証必須画面のデータ取得はServer Component / Server Actionからの
 サーバー側fetchであり、Playwrightの `page.route()` では捕まえられないため、次の3点で担保する。
@@ -184,11 +186,11 @@ ownerは実行ごとに一意にする（Nextのfetchキャッシュに当たる
 main はルールセット `protect-main` で保護されており、PR必須 + non-fast-forward に加えて
 次の3つのstatus checkが**すべて成功するまでマージできない**（いずれも `.github/workflows/ci.yml` のジョブ名）。
 
-| context                   | ジョブ   | 主な守備範囲                                                              |
-| ------------------------- | -------- | ------------------------------------------------------------------------- |
-| `Lint / Typecheck / Test` | `checks` | ESLint・Prettier・型・Prismaスキーマ・ユニットテスト                      |
-| `Build`                   | `build`  | プロダクションビルドが壊れていないこと                                    |
-| `E2E (Playwright)`        | `e2e`    | 375px横スクロール（不変条件7）・fetch並列化・認証必須画面・外部通信の復活 |
+| context                   | ジョブ   | 主な守備範囲                                                                        |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `Lint / Typecheck / Test` | `checks` | ESLint・Prettier・型・Prismaスキーマ・ユニットテスト                                |
+| `Build`                   | `build`  | プロダクションビルド                                                                |
+| `E2E (Playwright)`        | `e2e`    | 375px横スクロール（不変条件7）・fetch並列化・認証必須画面のスモーク・外部通信ガード |
 
 `E2E (Playwright)` は 2026-07-30 に追加した（Issue #22）。ルールセットの作成が
 E2EジョブのCI追加（Issue #12）より前だったため必須チェックに入っておらず、

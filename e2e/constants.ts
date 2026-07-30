@@ -10,6 +10,18 @@ export const MOCK_GITHUB_PORT = 3101;
 export const MOCK_GITHUB_BASE_URL = `http://127.0.0.1:${MOCK_GITHUB_PORT}`;
 
 /**
+ * レート上限の縮退表示を検証する専用のアプリインスタンス（Issue #23）。
+ * レート残量（`src/lib/github/client.ts` の `rateLimitRemaining`）はモジュール状態であり、
+ * フロア未満を一度観測するとそのプロセスの以降の全core呼び出しが遮断される。
+ * しかも遮断はfetchの手前で起きるため、**高残量の応答を踏ませても回復できない**
+ * （リクエスト自体が飛ばないので残量が更新されない）。
+ * そのため縮退の検証だけを別プロセスに隔離し、3100番のテストを一切巻き込まないようにする。
+ * 同じビルド成果物を `next start` するだけなので、追加のビルドは発生しない。
+ */
+export const RATE_LIMIT_APP_PORT = 3102;
+export const RATE_LIMIT_APP_BASE_URL = `http://localhost:${RATE_LIMIT_APP_PORT}`;
+
+/**
  * E2E固定のAuth.js署名鍵。playwright.config.ts の webServer.env でサーバーへ渡し、
  * テスト側は同じ値でセッションJWTを署名する。
  * Next.jsは既にprocess.envにある値を .env.local で上書きしないため、
@@ -83,3 +95,12 @@ export const SLOW_OWNER_PREFIX = 'slow';
 
 /** 遅延させるミリ秒。直列なら2本目の開始が1本目の終了より後になる幅を確保する */
 export const SLOW_RESPONSE_MS = 400;
+
+/**
+ * レート上限の縮退表示（Issue #23）の検証用。このプレフィックスで始まるownerへの応答は、
+ * モックサーバーが `x-ratelimit-remaining` をフロア未満（0）にして返す。
+ * これを踏んだアプリプロセスは以降coreプールを遮断するため、`RATE_LIMIT_APP_PORT` の
+ * インスタンスに対してのみ使う。ownerの最大長は39文字（`src/lib/favorite-input.ts`）なので、
+ * 一意化のサフィックスを足しても収まる短さにしておく。
+ */
+export const RATE_LIMITED_OWNER_PREFIX = 'ratelimited';

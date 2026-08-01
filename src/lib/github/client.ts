@@ -88,7 +88,11 @@ function trackRateLimit(res: Response, fallbackResource: RateLimitResource): voi
   rateLimitRemaining.set(resource, remaining);
 }
 
-async function githubFetch(pathOrUrl: string, revalidate: number): Promise<Response> {
+/**
+ * `revalidate` は秒数、または `'no-store'`（Data Cacheを完全にバイパス）。
+ * `'no-store'` はdigest cronの窓判定のように「数分の鮮度差が恒久的な取りこぼしになる」経路専用
+ */
+async function githubFetch(pathOrUrl: string, revalidate: number | 'no-store'): Promise<Response> {
   const baseUrl = resolveBaseUrl();
   const url = pathOrUrl.startsWith(`${baseUrl}/`) ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
   const resource = resourceForUrl(url);
@@ -103,7 +107,7 @@ async function githubFetch(pathOrUrl: string, revalidate: number): Promise<Respo
       'X-GitHub-Api-Version': API_VERSION,
       'User-Agent': 'repo-radar',
     },
-    next: { revalidate },
+    ...(revalidate === 'no-store' ? { cache: 'no-store' as const } : { next: { revalidate } }),
   });
   trackRateLimit(res, resource);
   return res;
@@ -168,6 +172,12 @@ export type ReleaseFetchOptions = {
   perPage?: number;
   /** 辿る最大ページ数。用途ごとに必ず上限を持つ（規約: 無限に辿らない） */
   maxPages?: number;
+  /**
+   * Data Cacheをバイパスして常に最新を取る。詳細画面とURLを共有するdigest cronが、
+   * 直前に温まったキャッシュ（最大revalidate秒前のスナップショット）で窓終端のリリースを
+   * 取りこぼさないための指定（Issue #36 指摘3）。画面系の経路では使わない
+   */
+  fresh?: boolean;
 };
 
 /**
@@ -185,11 +195,12 @@ export async function fetchReleases(
     Math.min(options.perPage ?? RELEASE_FETCH_DEFAULTS.perPage, MAX_PER_PAGE)
   );
   const maxPages = Math.max(1, options.maxPages ?? RELEASE_FETCH_DEFAULTS.maxPages);
+  const revalidate = options.fresh ? ('no-store' as const) : REVALIDATE_SECONDS.releases;
   const basePath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases`;
   const releases: Release[] = [];
   let url: string | null = `${basePath}?per_page=${perPage}`;
   for (let page = 0; page < maxPages && url !== null; page++) {
-    const res: Response = await githubFetch(url, REVALIDATE_SECONDS.releases);
+    const res: Response = await githubFetch(url, revalidate);
     if (res.status === 404) return null;
     if (!res.ok) await raiseForStatus(res, `GET ${basePath}`);
     releases.push(...parseWith(releaseListSchema, await res.json(), `GET ${basePath}`));

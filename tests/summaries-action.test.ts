@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getReleaseSummary } from '@/app/actions/summaries';
+import { RELEASE_SUMMARY_PROMPT_VERSION } from '@/lib/gemini/structured';
 import { UnauthorizedError } from '@/lib/require-session';
 
 const {
@@ -8,14 +9,14 @@ const {
   upsertMock,
   fetchRepositoryMock,
   fetchReleaseByTagMock,
-  generateTextMock,
+  generateStructuredMock,
 } = vi.hoisted(() => ({
   authMock: vi.fn(),
   findUniqueMock: vi.fn(),
   upsertMock: vi.fn(),
   fetchRepositoryMock: vi.fn(),
   fetchReleaseByTagMock: vi.fn(),
-  generateTextMock: vi.fn(),
+  generateStructuredMock: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: authMock }));
@@ -33,10 +34,19 @@ vi.mock('@/lib/github/client', async (importOriginal) => ({
 
 vi.mock('@/lib/gemini/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/gemini/client')>()),
-  generateText: generateTextMock,
+  generateStructured: generateStructuredMock,
 }));
 
 const INPUT = { owner: 'vercel', name: 'next.js', tagName: 'v16.2.0' };
+
+const STRUCTURED = {
+  headline: 'Turbopack既定化',
+  lede: 'ビルドの既定がTurbopackに切り替わった。',
+  lines: ['Turbopackが既定に', 'PPRが安定版に', '画像最適化のメモリを削減'],
+  hasBreaking: true,
+};
+
+const SUMMARY_TEXT = '・Turbopackが既定に\n・PPRが安定版に\n・画像最適化のメモリを削減';
 
 const REPO = {
   full_name: 'vercel/next.js',
@@ -58,7 +68,11 @@ beforeEach(() => {
   findUniqueMock.mockResolvedValue(null);
   fetchRepositoryMock.mockResolvedValue(REPO);
   fetchReleaseByTagMock.mockResolvedValue(RELEASE);
-  generateTextMock.mockResolvedValue({ text: '・要約', model: 'gemini-2.5-flash' });
+  generateStructuredMock.mockResolvedValue({
+    data: STRUCTURED,
+    text: JSON.stringify(STRUCTURED),
+    model: 'gemini-2.5-flash',
+  });
   upsertMock.mockImplementation(({ create }) => Promise.resolve(create));
 });
 
@@ -67,27 +81,62 @@ describe('getReleaseSummary', () => {
     authMock.mockResolvedValue(null);
     await expect(getReleaseSummary(INPUT)).rejects.toBeInstanceOf(UnauthorizedError);
     expect(findUniqueMock).not.toHaveBeenCalled();
-    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(generateStructuredMock).not.toHaveBeenCalled();
   });
 
   it('キャッシュヒット時はGeminiもGitHubも呼ばずに即返す', async () => {
-    findUniqueMock.mockResolvedValue({ summary: 'キャッシュ済み要約' });
+    findUniqueMock.mockResolvedValue({
+      summary: SUMMARY_TEXT,
+      headline: 'Turbopack既定化',
+      lede: 'ビルドの既定が切り替わった。',
+      hasBreaking: true,
+    });
     const result = await getReleaseSummary(INPUT);
-    expect(result).toEqual({ ok: true, summary: 'キャッシュ済み要約' });
+    expect(result).toEqual({
+      ok: true,
+      summary: SUMMARY_TEXT,
+      headline: 'Turbopack既定化',
+      lede: 'ビルドの既定が切り替わった。',
+      hasBreaking: true,
+    });
     expect(findUniqueMock).toHaveBeenCalledWith({
       where: { cacheKey: 'vercel/next.js@v16.2.0' },
     });
     expect(fetchRepositoryMock).not.toHaveBeenCalled();
-    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(generateStructuredMock).not.toHaveBeenCalled();
     expect(upsertMock).not.toHaveBeenCalled();
+  });
+
+  it('構造化以前のキャッシュ行は見出し無しのまま返す（表示側でフォールバック）', async () => {
+    findUniqueMock.mockResolvedValue({
+      summary: '・旧要約',
+      headline: null,
+      lede: null,
+      hasBreaking: null,
+    });
+    const result = await getReleaseSummary(INPUT);
+    expect(result).toEqual({
+      ok: true,
+      summary: '・旧要約',
+      headline: null,
+      lede: null,
+      hasBreaking: false,
+    });
   });
 
   it('キャッシュミス時はGitHubから引き直してGeminiを1回だけ呼び、保存してから返す', async () => {
     const result = await getReleaseSummary(INPUT);
-    expect(result).toEqual({ ok: true, summary: '・要約' });
-    expect(generateTextMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: SUMMARY_TEXT,
+      headline: 'Turbopack既定化',
+      lede: 'ビルドの既定がTurbopackに切り替わった。',
+      hasBreaking: true,
+    });
+    // 見出し・前文・破壊的変更フラグを足しても呼び出しは1回のまま
+    expect(generateStructuredMock).toHaveBeenCalledTimes(1);
     // プロンプトにはGitHub APIの canonical な full_name が使われる
-    expect(generateTextMock.mock.calls[0][0]).toContain('リポジトリ: vercel/next.js');
+    expect(generateStructuredMock.mock.calls[0][0]).toContain('リポジトリ: vercel/next.js');
     expect(upsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { cacheKey: 'vercel/next.js@v16.2.0' },
@@ -95,8 +144,41 @@ describe('getReleaseSummary', () => {
           cacheKey: 'vercel/next.js@v16.2.0',
           owner: 'vercel',
           repo: 'next.js',
-          summary: '・要約',
+          summary: SUMMARY_TEXT,
+          headline: 'Turbopack既定化',
+          lede: 'ビルドの既定がTurbopackに切り替わった。',
+          hasBreaking: true,
+          promptVersion: RELEASE_SUMMARY_PROMPT_VERSION,
           model: 'gemini-2.5-flash',
+        }),
+      })
+    );
+  });
+
+  it('構造化に失敗したらテキストのみで縮退保存する', async () => {
+    generateStructuredMock.mockResolvedValue({
+      data: null,
+      text: '・要約1\n・要約2',
+      model: 'gemini-2.5-flash-lite',
+    });
+
+    const result = await getReleaseSummary(INPUT);
+
+    expect(result).toEqual({
+      ok: true,
+      summary: '・要約1\n・要約2',
+      headline: null,
+      lede: null,
+      hasBreaking: false,
+    });
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          summary: '・要約1\n・要約2',
+          headline: null,
+          lede: null,
+          hasBreaking: null,
+          promptVersion: RELEASE_SUMMARY_PROMPT_VERSION,
         }),
       })
     );
@@ -120,14 +202,14 @@ describe('getReleaseSummary', () => {
     fetchReleaseByTagMock.mockResolvedValue(null);
     const result = await getReleaseSummary(INPUT);
     expect(result).toEqual({ ok: false, message: 'リリースが見つかりませんでした' });
-    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(generateStructuredMock).not.toHaveBeenCalled();
   });
 
   it('リリースノートが空ならGeminiを呼ばない', async () => {
     fetchReleaseByTagMock.mockResolvedValue({ ...RELEASE, body: '  ' });
     const result = await getReleaseSummary(INPUT);
     expect(result.ok).toBe(false);
-    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(generateStructuredMock).not.toHaveBeenCalled();
   });
 
   it('保存に失敗したら生成結果を返さない（キャッシュ迂回経路を作らない）', async () => {
@@ -138,7 +220,7 @@ describe('getReleaseSummary', () => {
 
   it('Geminiのレート超過はユーザー向けメッセージで返す', async () => {
     const { GeminiAPIError } = await import('@/lib/gemini/client');
-    generateTextMock.mockRejectedValue(
+    generateStructuredMock.mockRejectedValue(
       new GeminiAPIError(429, 'しばらく時間をおいて再試行してください')
     );
     const result = await getReleaseSummary(INPUT);

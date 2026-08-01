@@ -89,6 +89,24 @@ describe('generateText', () => {
     expect((error as Error).message).toBe('しばらく時間をおいて再試行してください');
   });
 
+  it('空応答はリトライ対象になり、全滅すればGeminiAPIErrorを投げる', async () => {
+    const { generateText, GeminiAPIError } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('')));
+    const error = await generateText('prompt').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GeminiAPIError);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('空応答のあとに本文が返れば回復する', async () => {
+    const { generateText } = await importClient();
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(successBody('   ')))
+      .mockResolvedValueOnce(fakeResponse(successBody('要約')));
+    const result = await generateText('prompt');
+    expect(result).toEqual({ text: '要約', model: 'gemini-2.5-flash' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('APIキー不正(400)は同一モデルでリトライせず次のモデルを試す', async () => {
     const { generateText } = await importClient();
     fetchMock
@@ -97,5 +115,87 @@ describe('generateText', () => {
     const result = await generateText('prompt');
     expect(result.model).toBe('gemini-2.5-flash-lite');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('generateStructured', () => {
+  const responseSchema = { type: 'OBJECT', properties: { value: { type: 'STRING' } } };
+
+  /** `{"value": "..."}` だけを構造化成功とみなす検証関数 */
+  function validate(text: string): { ok: true; value: string } | { ok: false; fallbackText: null } {
+    const match = /^\{"value":"(.+)"\}$/.exec(text);
+    return match ? { ok: true, value: match[1] } : { ok: false, fallbackText: null };
+  }
+
+  it('JSONモードの設定を送り、検証を通った値を返す', async () => {
+    const { generateStructured } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('{"value":"見出し"}')));
+
+    const result = await generateStructured('prompt', { responseSchema, validate });
+
+    expect(result).toEqual({
+      data: '見出し',
+      text: '{"value":"見出し"}',
+      model: 'gemini-2.5-flash',
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig.responseSchema).toEqual(responseSchema);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('検証に失敗したら作り直し、成功した出力を返す', async () => {
+    const { generateStructured } = await importClient();
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(successBody('壊れた出力')))
+      .mockResolvedValueOnce(fakeResponse(successBody('{"value":"見出し"}')));
+
+    const result = await generateStructured('prompt', { responseSchema, validate });
+
+    expect(result.data).toBe('見出し');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('全滅しても保存できるテキストが残っていれば縮退して返す（呼び出し回数は増やさない）', async () => {
+    const { generateStructured } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('・要約1\n・要約2')));
+
+    const result = await generateStructured('prompt', {
+      responseSchema,
+      validate: (text: string) => ({ ok: false as const, fallbackText: text }),
+    });
+
+    expect(result).toEqual({
+      data: null,
+      text: '・要約1\n・要約2',
+      model: 'gemini-2.5-flash-lite',
+    });
+    // 2モデル × 2試行。構造化しても上限は変わらない
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('空白だけの縮退テキストは保存に値しないので採用しない', async () => {
+    const { generateStructured, GeminiAPIError } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('壊れた出力')));
+
+    const error = await generateStructured('prompt', {
+      responseSchema,
+      validate: () => ({ ok: false as const, fallbackText: '   ' }),
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(GeminiAPIError);
+  });
+
+  it('縮退できる出力も無ければGeminiAPIErrorを投げる', async () => {
+    const { generateStructured, GeminiAPIError } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('壊れた出力')));
+
+    const error = await generateStructured('prompt', { responseSchema, validate }).catch(
+      (e: unknown) => e
+    );
+
+    expect(error).toBeInstanceOf(GeminiAPIError);
+    expect((error as Error).message).toBe('要約の生成に失敗しました');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

@@ -45,6 +45,15 @@ export function digestDayOf(window: DigestWindow): string {
   return window.end.toISOString().slice(0, 10);
 }
 
+/**
+ * 「今日の朝刊」の帰属日。/digest の本日分判定と紙面の一面がこれを共有する（Issue #31）。
+ * UTC日付の素朴な比較だと、朝刊が既に届いているのに 9:00 JST（0:00 UTC）以降ずっと
+ * 「本日分は未生成」と誤表示する（#30からの持ち越しバグ）
+ */
+export function latestDigestDay(now: Date): string {
+  return digestDayOf(digestWindowFor(now));
+}
+
 /** 窓内（start排他・end包含）に公開されたリリースのみ抽出する（draftのpublished_at=nullは除外） */
 export function releasesInWindow(releases: Release[], window: DigestWindow): Release[] {
   return releases.filter((release) => {

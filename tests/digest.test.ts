@@ -11,6 +11,7 @@ import {
   runDailyDigest,
   type DigestEntry,
 } from '@/lib/digest';
+import { latestDigestDay } from '@/lib/digest-window';
 import type { Release } from '@/lib/github/schemas';
 
 const {
@@ -145,6 +146,15 @@ describe('digestWindowFor / digestWindowsFor / digestDayOf', () => {
     expect(current.start.toISOString()).toBe('2026-07-24T21:00:00.000Z');
     expect(current.end.toISOString()).toBe('2026-07-25T21:00:00.000Z');
     expect(previous.end.getTime()).toBe(current.start.getTime());
+  });
+
+  // /digest の「本日分」判定と紙面の一面が共有する（#30持ち越しのJST意味論。Issue #31で裁定）
+  it('latestDigestDayは朝6:00 JST（21:00 UTC）を境に翌日へ切り替わる', () => {
+    // 7/25の朝刊（=7/25 21:00 UTC締め）は、7/26 20:59 UTC（= 7/27 5:59 JST）まで「本日分」
+    expect(latestDigestDay(new Date('2026-07-25T21:00:00Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T00:00:00Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T20:59:59Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T21:00:00Z'))).toBe('2026-07-26');
   });
 });
 

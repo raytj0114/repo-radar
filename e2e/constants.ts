@@ -79,8 +79,10 @@ export const E2E_DIGEST = {
 /**
  * シードするダイジェスト（朝刊形式 = entries）。`src/lib/digest.ts` の digestEntriesSchema と
  * 同じ形にする（ずれると画面は旧形式へフォールバックし、カードのアサーションが落ちて気づける）。
- * 2件目は「実在しうる長さ」のリポジトリ名 + 要約なしで、375pxのtruncateと
- * 「リリースノートなし」表示を同時に踏む。総括は「2リポジトリ・2リリース（うち破壊的変更1件）」になる。
+ * 2件目は「実在しうる長さ」のリポジトリ名 + 本文なし（noteless）で、375pxのtruncateと
+ * 「リリースノートなし」表示を同時に踏む。3件目は要約の生成失敗（noteless=false・summary=null）で、
+ * 「要約を生成できませんでした」表示を踏む（Issue #36 指摘2）。
+ * 総括は「3リポジトリ・3リリース（うち破壊的変更1件）」になる。
  */
 export const E2E_DIGEST_ENTRIES = {
   date: '2026-07-02',
@@ -96,6 +98,7 @@ export const E2E_DIGEST_ENTRIES = {
       summary:
         '・Turbopackが既定のビルドになった\n・App Routerのキャッシュ制御を刷新\n・画像最適化のメモリ使用量を削減',
       hasBreaking: true,
+      noteless: false,
     },
     {
       owner: 'octocat',
@@ -107,6 +110,19 @@ export const E2E_DIGEST_ENTRIES = {
       headline: null,
       summary: null,
       hasBreaking: null,
+      noteless: true,
+    },
+    {
+      owner: 'prisma',
+      repo: 'prisma',
+      fullName: 'prisma/prisma',
+      tagName: 'v7.2.0',
+      releaseName: '7.2.0',
+      publishedAt: '2026-07-01T21:15:00Z',
+      headline: null,
+      summary: null,
+      hasBreaking: null,
+      noteless: false,
     },
   ],
 };

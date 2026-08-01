@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>発掘記録 — RepoRadar 考古学 (MOCK 05)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     考古学 — 「十年を三分で」上映されるドキュメンタリー。
+     横に流れる時間の川。記録は光の柱、メジャーは石碑として立ち、
+     再生が現在に到達すると、管制室のライブ画面へ静かに引き継がれる。
+     すべての演出は再生時刻 t の純関数(スクラブのため)。
+     終幕のライブ掃引だけが実時間で回り続ける。
+     ============================================================ */
+  :root {
+    --ink: #dfe5ec;
+    --dim: #66707e;
+    --silver: #9db4d4;
+    --ph: #46ff8a;
+    --serif: "Shippori Mincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #04060a;
+    color: var(--ink);
+    font-family: "Yu Gothic UI", "Hiragino Sans", "Segoe UI", sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+
+  .counter {
+    position: fixed; top: 6%; left: 0; right: 0;
+    text-align: center;
+    font-size: clamp(14px, 3.2vw, 18px);
+    letter-spacing: 0.35em; text-indent: 0.35em;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stage {
+    position: fixed; left: 50%; top: 33%;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 680px);
+    text-align: center;
+  }
+  .stage > div { opacity: 0; }
+  .xl { font-family: var(--serif); font-size: clamp(30px, 8vw, 54px); font-weight: 400; letter-spacing: 0.3em; text-indent: 0.3em; line-height: 1.5; }
+  .lg { font-family: var(--serif); font-size: clamp(21px, 5.6vw, 34px); font-weight: 400; letter-spacing: 0.14em; line-height: 1.8; }
+  .sub { font-size: clamp(12px, 3vw, 14px); color: var(--dim); letter-spacing: 0.3em; margin-top: 18px; }
+  .owner { font-size: clamp(12px, 3vw, 14px); color: var(--dim); letter-spacing: 0.35em; }
+  .name { font-family: var(--serif); font-size: clamp(26px, 7vw, 46px); font-weight: 500; letter-spacing: 0.05em; overflow-wrap: anywhere; margin-top: 6px; }
+  .meta { font-size: clamp(11px, 2.8vw, 13px); color: var(--dim); letter-spacing: 0.22em; margin-top: 12px; font-variant-numeric: tabular-nums; }
+  .inscription { font-family: var(--serif); font-size: clamp(14px, 3.8vw, 16.5px); line-height: 2.1; letter-spacing: 0.06em; margin-top: 8px; }
+  .inscription:first-of-type { margin-top: 26px; }
+  .lost { font-family: var(--serif); font-size: clamp(14px, 3.8vw, 17px); color: var(--dim); letter-spacing: 0.25em; margin-top: 30px; }
+  .gapnum { font-size: clamp(38px, 11vw, 68px); font-weight: 200; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+  .gapcap { font-size: clamp(12px, 3vw, 14px); color: var(--dim); letter-spacing: 0.45em; text-indent: 0.45em; margin-top: 12px; }
+
+  .credit {
+    position: fixed; left: 0; right: 0; bottom: 12%;
+    text-align: center;
+    font-size: 11px; letter-spacing: 0.4em; text-indent: 0.4em;
+    color: rgba(120, 200, 150, 0);
+    transition: color 2.5s;
+    pointer-events: none;
+  }
+  .credit.show { color: rgba(140, 220, 165, 0.55); }
+
+  .controls {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px max(16px, 4vw) 22px;
+    transition: opacity 0.5s;
+  }
+  .playbtn {
+    flex: none; width: 40px; height: 40px;
+    background: none; border: 1px solid rgba(223, 229, 236, 0.28); border-radius: 50%;
+    color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .bar { flex: 1; position: relative; height: 28px; cursor: pointer; touch-action: none; }
+  .bar .rail { position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: rgba(223, 229, 236, 0.16); }
+  .bar .fill { position: absolute; left: 0; top: 13px; height: 2px; background: var(--silver); width: 0; }
+  .bar .tick { position: absolute; top: 10px; width: 1px; height: 8px; background: rgba(223, 229, 236, 0.3); }
+  .bar .handle { position: absolute; top: 9px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--silver); }
+  .timedisp { flex: none; font-size: 11.5px; color: var(--dim); letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(115% 95% at 50% 45%, transparent 58%, rgba(0, 0, 0, 0.5) 100%);
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="vignette"></div>
+<div class="counter" id="counter"></div>
+<div class="stage" id="stage"></div>
+<div class="credit" id="credit">発掘記録　REPORADAR ・ MOCK 05</div>
+<div class="controls" id="controls">
+  <button class="playbtn" id="playbtn" aria-label="再生/一時停止">❚❚</button>
+  <div class="bar" id="bar">
+    <div class="rail"></div>
+    <div class="fill" id="fill"></div>
+    <div class="handle" id="handle"></div>
+  </div>
+  <div class="timedisp" id="timedisp">0:00 / 0:00</div>
+</div>
+
+<script>
+'use strict';
+const DAY = 86400000;
+const TAU = Math.PI * 2;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const easeC = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const lerp = (a, b, m) => a + (b - a) * m;
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+const counterEl = document.getElementById('counter');
+const creditEl = document.getElementById('credit');
+const controls = document.getElementById('controls');
+const playbtn = document.getElementById('playbtn');
+const bar = document.getElementById('bar');
+const fill = document.getElementById('fill');
+const handle = document.getElementById('handle');
+const timedisp = document.getElementById('timedisp');
+
+let scenes = [], TOTAL = 0, MORPH_START = 0, MORPH_DUR = 5.5;
+let EVENTS = [], CAL0 = 0, CAL1 = 1;
+let t = 0, playing = false, curIdx = -1, lineEls = [];
+let scrubbing = false, wasPlaying = false, lastAct = 0, lastTs = null;
+let cw = 0, ch = 0, dpr = 1;
+
+/* ---- 管制室(MOCK 01)と同じ定位: 同じリポジトリは同じ方位に現れる ---- */
+function fnv(s) {
+  let h = 2166136261;
+  for (const c of s) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+const bearing = (s) => (fnv(s) / 4294967296) * TAU - Math.PI / 2;
+function radiusNorm(hours) {
+  const r = -0.1271 + 0.2732 * Math.log10(Math.max(hours, 0.5));
+  return Math.min(0.97, Math.max(0.07, r));
+}
+
+function fmtDate(ms) {
+  const d = new Date(ms + 9 * 3600000);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}.${p2(d.getUTCMonth() + 1)}.${p2(d.getUTCDate())}`;
+}
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/* ============================================================
+   リール(数字はすべてデータから導出。捏造しない)
+   ============================================================ */
+function addScene(s) { s.start = TOTAL; TOTAL += s.dur; scenes.push(s); }
+function card(dur, d, lines, showCounter) {
+  addScene({ dur, d0: d, d1: d, counter: !!showCounter, lines });
+}
+function buildReel(data) {
+  EVENTS = data.favorites
+    .map((f) => ({
+      ...f,
+      cal: new Date(f.publishedAt).getTime(),
+      stele: /^v?\d+\.0\.0$/.test(f.tagName),   // タグから導出できる唯一の「メジャー」判定
+    }))
+    .sort((a, b) => a.cal - b.cal);
+  const gen = new Date(data.generatedAt).getTime();
+  CAL0 = EVENTS[0].cal; CAL1 = gen;
+  const totalDays = Math.floor((gen - CAL0) / DAY);
+  const lastYear = new Date(gen).getUTCFullYear();
+
+  card(5, CAL0, [
+    { t: '発掘記録', c: 'xl', at: 0.5 },
+    { t: 'REPORADAR EXCAVATION FILM', c: 'sub', at: 1.6 },
+  ]);
+  card(5.5, CAL0, [
+    { t: `${totalDays}日を、三分で。`, c: 'lg', at: 0.4 },
+    { t: `${fmtDate(CAL0)} — ${fmtDate(gen)}`, c: 'sub', at: 1.5 },
+  ]);
+
+  let prevCal = CAL0, prevYear = null;
+  for (const ev of EVENTS) {
+    const gapDays = Math.floor((ev.cal - prevCal) / DAY);
+    if (gapDays > 0) {
+      const dur = Math.min(6.5, Math.max(1.6, 1.6 + Math.log10(1 + gapDays) * 1.7));
+      addScene({
+        dur, d0: prevCal, d1: ev.cal, counter: true,
+        lines: gapDays >= 30
+          ? [{ t: '+0日', c: 'gapnum', at: 0.3 }, { t: '記録がない', c: 'gapcap', at: 0.8 }]
+          : [],
+        dyn: (p, els) => { if (els[0]) els[0].textContent = `+${Math.floor(gapDays * easeC(p))}日`; },
+      });
+    }
+    const y = new Date(ev.cal).getUTCFullYear();
+    if (y !== prevYear) {
+      const subtitle =
+        prevYear === null ? '最初の記録'
+        : y === lastYear ? `${EVENTS.length}件の記録のうち、${EVENTS.filter((e) => new Date(e.cal).getUTCFullYear() === y).length}件が、この年に。`
+        : `${gapDays}日ぶりの記録`;
+      card(4.5, ev.cal, [
+        { t: String(y), c: 'xl', at: 0.3 },
+        { t: subtitle, c: 'sub', at: 1.3 },
+      ], true);
+      prevYear = y;
+    }
+    const [owner, name] = ev.fullName.split('/');
+    const lines = [
+      { t: owner, c: 'owner', at: 0.2 },
+      { t: name, c: 'name', at: 0.5 },
+      { t: `${ev.language}・${ev.tagName}・${fmtDate(ev.cal)}`, c: 'meta', at: 1.1 },
+    ];
+    if (ev.summary) {
+      ev.summary.forEach((s, i) =>
+        lines.push({ t: s.replace(/^・/, ''), c: 'inscription', at: 1.9 + i * 1.1 }));
+    } else {
+      lines.push({ t: '―― 碑文は、失われている。', c: 'lost', at: 1.9 });
+    }
+    addScene({ dur: ev.summary ? 8.5 : 5, d0: ev.cal, d1: ev.cal, counter: true, lines, evCal: ev.cal });
+    prevCal = ev.cal;
+  }
+
+  /* 終幕: 現在に到達 → 管制室へ引き継ぐ */
+  addScene({ dur: 3.5, d0: prevCal, d1: gen, counter: true, lines: [] });
+  card(4.5, gen, [{ t: 'そして、いまここ。', c: 'lg', at: 0.6 }], true);
+  MORPH_START = TOTAL;
+  addScene({ dur: MORPH_DUR, d0: gen, d1: gen, counter: false, lines: [], morph: true });
+
+  bar.insertAdjacentHTML('beforeend',
+    scenes.filter((s) => s.evCal)
+      .map((s) => `<div class="tick" style="left:${((s.start / TOTAL) * 100).toFixed(2)}%"></div>`).join(''));
+}
+
+/* ============================================================
+   キャンバス: 時間の川 → スコープへの折り畳み → ライブ掃引
+   ============================================================ */
+const PX_PER_DAY = 3.4;
+const worldX = (ms) => ((ms - CAL0) / DAY) * PX_PER_DAY;
+const lerpColor = (m) => {          // 銀青 → 燐光緑
+  const a = [157, 180, 212], b = [70, 255, 138];
+  return `${Math.round(lerp(a[0], b[0], m))},${Math.round(lerp(a[1], b[1], m))},${Math.round(lerp(a[2], b[2], m))}`;
+};
+
+function drawRiver(cal, alpha, activeCal) {
+  const baseY = ch * 0.64;
+  const cx = cw / 2;
+  const cam = worldX(Math.min(cal, CAL1));
+  const sx = (ms) => cx + (worldX(ms) - cam);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 川筋(基線)と暦の目盛
+  ctx.strokeStyle = 'rgba(223,229,236,0.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(Math.min(cw, sx(CAL1)), baseY); ctx.stroke();
+  ctx.fillStyle = 'rgba(223,229,236,0.35)';
+  ctx.font = '11px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  const y0 = new Date(CAL0).getUTCFullYear(), y1 = new Date(CAL1).getUTCFullYear();
+  for (let y = y0; y <= y1 + 1; y++) {
+    const ms = Date.UTC(y, 0, 1);
+    const x = sx(ms);
+    if (x < -40 || x > cw + 40 || ms > CAL1) continue;
+    ctx.strokeStyle = 'rgba(223,229,236,0.18)';
+    ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 8); ctx.stroke();
+    ctx.fillText(String(y), x, baseY + 24);
+  }
+
+  // 地層: 堆積した記録の数が標高としてせり上がる
+  const unit = Math.min(11, ch * 0.015);
+  ctx.beginPath();
+  ctx.moveTo(0, baseY);
+  let hPrev = 0;
+  for (let i = 0; i < EVENTS.length; i++) {
+    const x = Math.max(-60, Math.min(cw + 60, sx(EVENTS[i].cal)));
+    ctx.lineTo(x, baseY - hPrev);
+    hPrev = (i + 1) * unit;
+    ctx.lineTo(x, baseY - hPrev);
+  }
+  const endX = Math.min(cw + 60, sx(CAL1));
+  ctx.lineTo(endX, baseY - hPrev);
+  ctx.lineTo(endX, baseY);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(157,180,212,0.07)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(157,180,212,0.22)';
+  ctx.stroke();
+
+  // 記録の柱と石碑
+  for (const ev of EVENTS) {
+    const x = sx(ev.cal);
+    if (x < -80 || x > cw + 80) continue;
+    const prox = clamp01(1 - Math.abs(x - cx) / (cw * 0.45));
+    const b = Math.min(1, 0.18 + 0.5 * prox + (activeCal === ev.cal ? 0.35 : 0));
+    if (ev.stele) {
+      // メジャーバージョン(x.0.0)は石碑として立つ
+      const h = 120;
+      ctx.fillStyle = `rgba(157,180,212,${(0.16 + 0.5 * b).toFixed(3)})`;
+      ctx.shadowColor = '#9db4d4'; ctx.shadowBlur = 18 * b;
+      ctx.fillRect(x - 5, baseY - h, 10, h);
+      ctx.shadowBlur = 0;
+    } else {
+      const h = 58;
+      ctx.strokeStyle = `rgba(223,229,236,${(0.25 + 0.6 * b).toFixed(3)})`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#dfe5ec'; ctx.shadowBlur = 10 * b;
+      ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY - h); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, baseY - h, 2.2, 0, TAU); ctx.fillStyle = `rgba(223,229,236,${b.toFixed(3)})`; ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = `rgba(157,180,212,${(0.2 + 0.7 * b).toFixed(3)})`;
+    ctx.font = '10px "Segoe UI", sans-serif';
+    ctx.fillText(ev.tagName, x, baseY - (ev.stele ? 132 : 70));
+  }
+
+  // 現在の断崖: このさきの地層は、まだ堆積していない
+  const nx = sx(CAL1);
+  if (nx > -20 && nx < cw + 20) {
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = 'rgba(223,229,236,0.4)';
+    ctx.beginPath(); ctx.moveTo(nx, baseY - 150); ctx.lineTo(nx, baseY + 26); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(223,229,236,0.5)';
+    ctx.fillText('現在', nx, baseY - 160);
+  }
+  ctx.restore();
+}
+
+/* ---- 折り畳みの出発点: 到着時(カメラ=現在)の柱の頭の座標 ---- */
+function riverHead(ev) {
+  const baseY = ch * 0.64;
+  const x = cw / 2 + (worldX(ev.cal) - worldX(CAL1));
+  return { x, y: baseY - (ev.stele ? 120 : 58) };
+}
+function drawRadar(m, live) {
+  const cx = cw / 2, cy = ch * 0.45;
+  const R = Math.min(cw, ch) * 0.34;
+  const col = lerpColor(m);
+  ctx.save();
+
+  // リング(24H/7D/30D/1Y)と外周
+  ctx.globalAlpha = m;
+  ctx.strokeStyle = `rgba(${col},0.22)`;
+  ctx.fillStyle = `rgba(${col},0.5)`;
+  ctx.font = '10px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  for (const [hrs, label] of [[24, '24H'], [168, '7D'], [720, '30D'], [8760, '1Y']]) {
+    const r = radiusNorm(hrs) * R;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+    if (m > 0.7) ctx.fillText(label, cx, cy - r + 12);
+  }
+  ctx.strokeStyle = `rgba(${col},0.35)`;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+
+  // ライブ掃引(上映終了後は実時間で回り続ける)
+  let sweep = -Math.PI / 2;
+  if (live && !REDUCED) {
+    sweep = ((performance.now() / 8000) % 1) * TAU - Math.PI / 2;
+    if (ctx.createConicGradient) {
+      const wedge = 1.15;
+      const g = ctx.createConicGradient(sweep - wedge, cx, cy);
+      g.addColorStop(0, `rgba(${col},0)`);
+      g.addColorStop(wedge / TAU, `rgba(${col},0.28)`);
+      g.addColorStop(wedge / TAU + 0.002, `rgba(${col},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+    }
+    ctx.strokeStyle = `rgba(${col},0.9)`;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = `rgb(${col})`; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(sweep) * R, cy + Math.sin(sweep) * R);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // 遺物が機影になる: 川の座標 → スコープの定位(MOCK 01と同じ方位)へ
+  const e = easeC(m);
+  for (const ev of EVENTS) {
+    const hours = (CAL1 - ev.cal) / 3600000;
+    const a = bearing(ev.fullName);
+    const r = radiusNorm(hours) * R;
+    const tx = cx + Math.cos(a) * r, ty = cy + Math.sin(a) * r;
+    const src = riverHead(ev);
+    const x = lerp(src.x, tx, e), y = lerp(src.y, ty, e);
+    let bright = 0.75;
+    if (live && !REDUCED) {
+      const behind = (sweep - a + TAU * 2) % TAU;
+      bright = 0.2 + 0.8 * Math.pow(1 - behind / TAU, 1.7);
+    }
+    const isNew = hours <= 48;
+    ctx.shadowColor = `rgb(${col})`; ctx.shadowBlur = (5 + 10 * bright) * m;
+    ctx.fillStyle = `rgba(${col},${(m * (0.3 + 0.7 * bright)).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(x, y, isNew ? 3.4 : 2.6, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (isNew && m > 0.85) {
+      ctx.fillStyle = `rgba(${col},${(0.35 + 0.6 * bright).toFixed(3)})`;
+      ctx.textAlign = 'left';
+      ctx.fillText(ev.tagName, x + 7, y - 6);
+      ctx.textAlign = 'center';
+    }
+  }
+  ctx.restore();
+}
+
+function canvasDraw(tt, cal, activeCal) {
+  const m = tt <= MORPH_START ? 0 : clamp01((tt - MORPH_START) / MORPH_DUR);
+  ctx.fillStyle = m > 0 ? `rgb(${Math.round(lerp(4, 2, m))},${Math.round(lerp(6, 10, m))},${Math.round(lerp(10, 6, m))})` : '#04060a';
+  ctx.fillRect(0, 0, cw, ch);
+  if (m < 1) drawRiver(cal, 1 - m, activeCal);
+  if (m > 0) drawRadar(m, tt >= TOTAL);
+}
+
+/* ============================================================
+   映写(オーバーレイはDOM、風景はキャンバス。どちらも t の純関数)
+   ============================================================ */
+function sceneAt(tt) {
+  for (let i = scenes.length - 1; i >= 0; i--) if (tt >= scenes[i].start) return i;
+  return 0;
+}
+function mount(sc) {
+  stage.innerHTML = '';
+  lineEls = sc.lines.map((ln) => {
+    const el = document.createElement('div');
+    el.className = ln.c;
+    el.textContent = ln.t;
+    stage.appendChild(el);
+    return el;
+  });
+}
+function render(tt) {
+  const idx = sceneAt(tt);
+  const sc = scenes[idx];
+  if (idx !== curIdx) { mount(sc); curIdx = idx; }
+  const local = tt - sc.start;
+  const p = clamp01(local / sc.dur);
+  const outOp = clamp01((sc.dur - local) / 0.6);
+  sc.lines.forEach((ln, i) => {
+    lineEls[i].style.opacity = (clamp01((local - ln.at) / 0.7) * outOp).toFixed(3);
+  });
+  if (sc.dyn) sc.dyn(p, lineEls);
+
+  const cal = sc.d0 === sc.d1 ? sc.d0 : sc.d0 + (sc.d1 - sc.d0) * easeC(p);
+  counterEl.textContent = fmtDate(cal);
+  counterEl.style.opacity = sc.counter ? 0.85 : 0;
+
+  canvasDraw(tt, cal, sc.evCal);
+  creditEl.classList.toggle('show', tt >= TOTAL && performance.now() - liveSince < 8000);
+
+  const frac = tt / TOTAL;
+  fill.style.width = `${(frac * 100).toFixed(2)}%`;
+  handle.style.left = `${(frac * 100).toFixed(2)}%`;
+  timedisp.textContent = `${fmtClock(tt)} / ${fmtClock(TOTAL)}`;
+  playbtn.textContent = tt >= TOTAL ? '↺' : playing ? '❚❚' : '▶';
+}
+function seek(tt) {
+  t = Math.min(TOTAL, Math.max(0, tt));
+  if (t < TOTAL) liveSince = Infinity;
+  render(t);
+}
+
+let liveSince = Infinity;
+function tick(ts) {
+  if (lastTs !== null && playing) {
+    t = Math.min(TOTAL, t + (ts - lastTs) / 1000);
+    if (t >= TOTAL) playing = false;
+  }
+  if (t >= TOTAL && liveSince === Infinity) liveSince = performance.now();
+  lastTs = ts;
+  render(t);
+  controls.style.opacity = (playing || t >= TOTAL) && ts - lastAct > 3000 ? 0.3 : 1;
+  requestAnimationFrame(tick);
+}
+
+/* ---- 操作 ---- */
+function togglePlay() {
+  if (t >= TOTAL) { seek(0); playing = true; }
+  else playing = !playing;
+}
+playbtn.addEventListener('click', (ev) => { ev.stopPropagation(); togglePlay(); });
+document.body.addEventListener('click', (ev) => {
+  if (!ev.target.closest('.controls')) togglePlay();
+});
+function seekFrac(ev) {
+  const r = bar.getBoundingClientRect();
+  seek(((ev.clientX - r.left) / r.width) * TOTAL);
+}
+bar.addEventListener('pointerdown', (ev) => {
+  ev.stopPropagation();
+  try { bar.setPointerCapture(ev.pointerId); } catch {}
+  scrubbing = true; wasPlaying = playing; playing = false;
+  seekFrac(ev);
+});
+bar.addEventListener('pointermove', (ev) => { if (scrubbing) seekFrac(ev); });
+const endScrub = () => {
+  if (!scrubbing) return;
+  scrubbing = false;
+  playing = wasPlaying && t < TOTAL;
+};
+bar.addEventListener('pointerup', endScrub);
+bar.addEventListener('pointercancel', endScrub);
+bar.addEventListener('click', (ev) => ev.stopPropagation());
+addEventListener('keydown', (ev) => {
+  if (ev.key === ' ') { ev.preventDefault(); togglePlay(); }
+  if (ev.key === 'ArrowRight') seek(t + 5);
+  if (ev.key === 'ArrowLeft') seek(t - 5);
+});
+addEventListener('pointermove', () => { lastAct = performance.now(); });
+addEventListener('pointerdown', () => { lastAct = performance.now(); });
+
+/* ---- 画布 ---- */
+function resize() {
+  dpr = Math.min(devicePixelRatio || 1, 2);
+  cw = innerWidth; ch = innerHeight;
+  cv.width = cw * dpr; cv.height = ch * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', () => { resize(); render(t); });
+resize();
+
+/* ---- 開幕 ---- */
+fetch('./data.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((data) => {
+    buildReel(data);
+    playing = !REDUCED;          // 動きを抑制した環境では静止で開き、▶を待つ
+    seek(0);
+    requestAnimationFrame(tick);
+  })
+  .catch(() => {
+    stage.innerHTML = '<div class="lg" style="opacity:1">記録が、読み出せない。</div>' +
+      '<div class="sub" style="opacity:1">data.json に到達できません。devサーバー経由で開いてください。</div>';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>日刊 RepoRadar 第四一四号 — 文芸版 (MOCK 02)</title>
+<style>
+  /* ============================================================
+     文芸版 — 新聞組版。動くものは何もない。それがこの案の主張。
+     紙 #f6f0e3 / 墨 #211c14 / 朱 #a63a2e の三色のみ。
+     見出しはゴシック、本文は明朝(日本の新聞の組み方)。
+     ============================================================ */
+  :root {
+    --paper: #f6f0e3;
+    --ink: #211c14;
+    --shu: #a63a2e;
+    --rule: #cfc4ab;
+    --mincho: "Yu Mincho", YuMincho, "Hiragino Mincho ProN", "BIZ UDMincho",
+      "Noto Serif JP", "MS PMincho", serif;
+    --gothic: "Yu Gothic", YuGothic, "Hiragino Kaku Gothic ProN", "BIZ UDGothic",
+      "Noto Sans JP", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #b6ad9c;
+    color: var(--ink);
+    font-family: var(--mincho);
+    font-size: 14px;
+    line-height: 1.9;
+    font-feature-settings: "palt";
+  }
+  .paper {
+    max-width: 1024px;
+    margin: 24px auto;
+    background: var(--paper);
+    padding: 26px 34px 20px;
+    box-shadow: 0 2px 18px rgba(30, 22, 10, 0.35);
+  }
+
+  /* ---- 題字まわり ---- */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 16px;
+  }
+  .ear { font-size: 11px; line-height: 1.7; border: 1px solid var(--rule); padding: 6px 10px; }
+  .ear.right { justify-self: end; text-align: right; border: none; padding: 0; }
+  .daiji {
+    text-align: center;
+    font-size: clamp(34px, 6vw, 52px);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .motto { text-align: center; font-size: 11px; letter-spacing: 0.4em; margin-top: 2px; }
+  .seal {
+    display: inline-block; background: var(--shu); color: var(--paper);
+    font-family: var(--gothic); font-size: 13px; font-weight: 700;
+    width: 2.6em; height: 2.6em; line-height: 1.3em; padding: 0.65em 0.35em 0;
+    text-align: center; transform: rotate(-3deg); letter-spacing: 0.1em;
+  }
+  .dateline {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1.5em;
+    font-size: 12.5px; letter-spacing: 0.12em;
+    border-top: 3px double var(--ink);
+    border-bottom: 1px solid var(--ink);
+    margin-top: 10px; padding: 4px 0;
+  }
+
+  /* ---- 欄名(白抜き看板)と罫 ---- */
+  .kanban {
+    display: inline-block; background: var(--ink); color: var(--paper);
+    font-family: var(--gothic); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.35em; padding: 2px 10px 2px 12px; margin-bottom: 8px;
+  }
+  section { border-top: 1px solid var(--ink); padding-top: 12px; margin-top: 18px; }
+  section.no-rule { border-top: none; margin-top: 8px; }
+
+  /* ---- 一面トップ ---- */
+  .lead-hd {
+    font-family: var(--gothic); font-weight: 900;
+    font-size: clamp(27px, 4.6vw, 42px);
+    line-height: 1.35; letter-spacing: 0.04em; margin: 4px 0 0;
+  }
+  .lead-sub {
+    font-family: var(--gothic); font-weight: 700;
+    font-size: clamp(15px, 2.4vw, 20px);
+    margin: 4px 0 14px; letter-spacing: 0.06em;
+  }
+  .lead-body { columns: 3; column-gap: 26px; column-rule: 1px solid var(--rule); text-align: justify; }
+  .lead-body p { margin: 0; text-indent: 1em; }
+  .lead-body p.lede { font-weight: 700; text-indent: 0; }
+  .lead-body p.lede::first-letter {
+    float: left; font-size: 3em; line-height: 1; padding: 4px 8px 0 0; font-weight: 700;
+  }
+  .pullquote {
+    break-inside: avoid; border: 1px solid var(--ink); padding: 10px 14px;
+    margin: 12px 4px; text-align: center; font-size: 15px; line-height: 2;
+  }
+  .pullquote small { display: block; font-size: 11px; letter-spacing: 0.1em; }
+  .byline { text-align: right; font-size: 12px; }
+
+  /* ---- 中段・下段グリッド ---- */
+  .row { display: grid; gap: 26px; }
+  .row.mid { grid-template-columns: 1.7fr 1fr; }
+  .row.low { grid-template-columns: 1.3fr 1fr; }
+  .row > div { min-width: 0; }
+  .row.mid > div + div, .row.low > div + div { border-left: 1px solid var(--rule); padding-left: 26px; }
+
+  h3.small-hd { font-family: var(--gothic); font-weight: 700; font-size: 19px; margin: 0 0 8px; line-height: 1.5; }
+  h3.small-hd small { display: block; font-size: 13px; font-weight: 700; }
+  .article p { margin: 0; text-indent: 1em; text-align: justify; }
+
+  /* 短信 */
+  .tanshin { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .tanshin li { padding: 5px 0; border-bottom: 1px dotted var(--rule); text-align: justify; }
+  .tanshin b { font-family: var(--gothic); font-weight: 700; }
+
+  /* コラム(縦書きの帯) */
+  .column-box { display: flex; gap: 14px; align-items: stretch; }
+  .tate {
+    writing-mode: vertical-rl; background: var(--shu); color: var(--paper);
+    font-family: var(--gothic); font-weight: 700; font-size: 15px;
+    letter-spacing: 0.5em; padding: 14px 7px; flex: none;
+  }
+  .column-box .body { font-size: 13.5px; text-align: justify; }
+  .column-box .body p { margin: 0; text-indent: 1em; }
+
+  /* 表(相場・沈黙) */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; font-size: 11px; padding-bottom: 4px; letter-spacing: 0.05em; }
+  th { font-family: var(--gothic); font-weight: 700; font-size: 11px; text-align: left; border-bottom: 1px solid var(--ink); padding: 2px 4px; }
+  td { border-bottom: 1px dotted var(--rule); padding: 3px 4px; }
+  td.num { text-align: right; white-space: nowrap; }
+  tr.dead td { font-weight: 700; }
+  .up { color: var(--shu); }
+
+  /* 天気(API残量) */
+  .weather { border: 1px solid var(--ink); padding: 10px 12px; text-align: center; margin-top: 14px; }
+  .weather .sky { font-size: 30px; font-weight: 700; letter-spacing: 0.2em; }
+  .weather .num { font-size: 13px; }
+  .weather .memo { font-size: 11px; }
+
+  /* 連載 */
+  .serial { border-top: 3px double var(--ink); margin-top: 22px; padding-top: 12px; }
+  .serial .body { columns: 2; column-gap: 26px; column-rule: 1px solid var(--rule); font-size: 13.5px; text-align: justify; }
+  .serial .body p { margin: 0; text-indent: 1em; }
+  .next-note { font-size: 11.5px; text-align: right; margin-top: 6px; }
+
+  /* 奥付 */
+  footer {
+    border-top: 1px solid var(--ink); margin-top: 20px; padding-top: 8px;
+    font-size: 10.5px; text-align: center; letter-spacing: 0.15em; line-height: 2;
+  }
+  .kyusai { font-size: 12px; border: 1px solid var(--rule); padding: 8px; text-align: center; }
+
+  /* ---- 390px: 段を畳む。横スクロールは出さない ---- */
+  @media (max-width: 760px) {
+    .paper { margin: 0; padding: 18px 14px 14px; }
+    .masthead { grid-template-columns: 1fr; }
+    .ear { display: none; }
+    .ear.right { display: block; justify-self: center; text-align: center; }
+    .lead-body { columns: 1; }
+    .row.mid, .row.low { grid-template-columns: 1fr; }
+    .row.mid > div + div, .row.low > div + div { border-left: none; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 14px; }
+    .serial .body { columns: 1; }
+  }
+  @media (min-width: 761px) and (max-width: 980px) { .lead-body { columns: 2; } }
+
+  @media print {
+    body { background: #fff; }
+    .paper { box-shadow: none; max-width: none; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="paper">
+
+  <header>
+    <div class="masthead">
+      <div class="ear" id="ear-weather">
+        本日のAPI残量<br /><span id="ear-sky">─</span>
+      </div>
+      <div>
+        <h1 class="daiji">日刊 RepoRadar</h1>
+        <p class="motto">— リリースは不変、紙面は日々 —</p>
+      </div>
+      <div class="ear right"><span class="seal">観<br />測</span></div>
+    </div>
+    <div class="dateline">
+      <span>第四一四号</span>
+      <span>二〇二六年七月三十一日　金曜日</span>
+      <span>最終版（二一時締）</span>
+      <span>観測所発行・無代</span>
+    </div>
+  </header>
+
+  <!-- ============ 一面トップ ============ -->
+  <section class="no-rule">
+    <h2 class="lead-hd">Turbopackキャッシュ、既定を反転</h2>
+    <p class="lead-sub">Next.js 16.2.1　移行は一行、影響は全域</p>
+    <div class="lead-body">
+      <p class="lede">
+        米Vercel社のNext.jsは三十一日午後、バージョン16.2.1を公開した。Turbopackの
+        キャッシュ既定値を反転させ全ビルドに適用する変更が柱で、部分プリレンダリング
+        （PPR）の安定版昇格、画像最適化のメモリ使用量四割削減がこれに続く。
+      </p>
+      <p>
+        既定値の反転そのものは設定一行で追随できる。だが影響はビルドの全域に及ぶ。
+        従来は明示的に有効化した場合に限られていたキャッシュが、今後はすべてのビルドで
+        前提となるため、CI側で独自のキャッシュ戦略を組んでいる現場では二重化に注意が
+        要る。逆に、何も設定してこなかった多数派にとっては、今朝から黙って速くなる類の
+        変更である。
+      </p>
+      <div class="pullquote">
+        「速さは機能ではなく、<br />既定であるべきだ」
+        <small>——リリースノート冒頭より（意訳）</small>
+      </div>
+      <p>
+        16.2系は安定化の系列と目され、PPRの昇格はその総仕上げにあたる。実験フラグの
+        後ろで二年近く寝かせた機能を、既定有効ではなくまず安定版として出す——この
+        慎重さに16系の設計思想が見える。次の大きな動きは17系の破壊的変更予告と
+        なろう。本紙は引き続き掃引を続ける。
+      </p>
+      <p class="byline">（観測員）</p>
+    </div>
+  </section>
+
+  <!-- ============ 中段: 二番手記事 + 短信 ============ -->
+  <section>
+    <div class="row mid">
+      <div class="article">
+        <span class="kanban">データ基盤</span>
+        <h3 class="small-hd">TypedSQL、複数スキーマへ<small>Prisma 6.14　診断ログも増強</small></h3>
+        <p>
+          Prismaは三十一日未明、6.14.0を公開した。生のSQLに型を与えるTypedSQLが
+          マルチスキーマ構成に対応し、大規模データベースを論理分割して運用する現場でも
+          型の恩恵が届くようになった。
+        </p>
+        <p>
+          あわせて接続プール枯渇時の診断ログが詳細化された。プールの問題は再現が難しく、
+          本番でのみ顔を出す。ログの増強は地味だが、深夜の障害対応の時間を確実に削る類の
+          改善である。Postgres 18の新JSON関数へのネイティブ対応も入った。
+        </p>
+      </div>
+      <div>
+        <span class="kanban">短信</span>
+        <ul class="tanshin" id="tanshin">
+          <li class="kyusai">（組版中）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 下段: コラム + 相場・天気・沈黙 ============ -->
+  <section>
+    <div class="row low">
+      <div class="column-box">
+        <div class="tate">観測手記</div>
+        <div class="body">
+          <p>
+            今週の紙面は削除の記事ばかり組んでいる。Reactはレガシーと呼ばれて久しい
+            Context APIをついに消し、TypeScriptはenumの数値逆引きを既定で無効にする
+            という。大きなソフトウェアの節目は、何かを足した日ではなく、何かを消せた日に
+            来るのかもしれない。
+          </p>
+          <p>
+            機能を足す告知は易しい。消す告知は、それを使っていた誰かの朝を壊す覚悟の
+            文章になる。リリースノートで最も読み応えがあるのは、いつもBreaking Changes
+            の節だ。そこには設計者が「これはもう間違いだった」と認める瞬間が記録されて
+            いる。私たちが毎朝リリースを読むのは、新機能の目録が欲しいからではなく、
+            他人の後悔の速報を読みたいからではないか。
+          </p>
+        </div>
+      </div>
+      <div>
+        <span class="kanban">相場</span>
+        <table>
+          <caption>スター相場（新興・観測三十日）▲は前日比増</caption>
+          <thead><tr><th>銘柄</th><th style="text-align:right">星数</th><th style="text-align:right">前日比</th></tr></thead>
+          <tbody id="souba"><tr><td colspan="3" class="kyusai">（組版中）</td></tr></tbody>
+        </table>
+
+        <div class="weather">
+          <div style="font-size:11px; letter-spacing:0.3em;">本日のAPI残量</div>
+          <div class="sky" id="sky">─</div>
+          <div class="num" id="sky-num">─ / ─</div>
+          <div class="memo" id="sky-memo"></div>
+        </div>
+
+        <table style="margin-top:14px">
+          <caption>沈黙の記録（無信号百八十日超）一年超は太字</caption>
+          <thead><tr><th>銘柄</th><th>最終信号</th><th style="text-align:right">沈黙</th></tr></thead>
+          <tbody id="silence"><tr><td colspan="3" class="kyusai">（組版中）</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 連載 ============ -->
+  <div class="serial">
+    <span class="kanban">連載</span>
+    <h3 class="small-hd">依存の系譜　第百三十一回<small>express——十年の静止、その後</small></h3>
+    <div class="body">
+      <p>
+        Node.jsの標準玄関であり続けたexpressは、v4のまま約十年を過ごした。5.0が形に
+        なったのは二〇二四年の秋。積年の課題だったPromise対応をようやく果たし、
+        5.1.0（二〇二五年九月）を最後に、また静かになっている。
+      </p>
+      <p>
+        十箇月の無信号を「停滞」と読むか、「完成」と読むか。HTTPそのものが変わらない
+        限り、変わらない理由を持つソフトウェアもある。レーダーの外周で動かない輝点は、
+        死んだのではなく、軌道が安定しているだけかもしれない——ただし、その見極めこそが
+        観測の仕事である。
+      </p>
+    </div>
+    <p class="next-note">（次回・node-jsonwebtoken　三年の沈黙を聴く）</p>
+  </div>
+
+  <footer>
+    発行　RepoRadar観測所　｜　凍結データ　二〇二六年七月三十一日　二一時採録　｜　MOCK-02<br />
+    本紙の見出し・記事・コラムは本実装ではAIが毎朝組む（本モックでは固定文）。短信・相場・沈黙・天気の各欄はdata.jsonより採字。
+  </footer>
+</div>
+
+<script>
+'use strict';
+/* 文芸版の機械組み部分: 短信・相場・沈黙・天気だけを data.json から組む。
+   動きは一切ない。組版して、終わり。 */
+const KANJI = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+function kanji(n) {
+  if (n < 10) return KANJI[n];
+  if (n < 100) {
+    const t = Math.floor(n / 10), o = n % 10;
+    return (t > 1 ? KANJI[t] : '') + '十' + (o ? KANJI[o] : '');
+  }
+  return String(n);
+}
+function fnv(s) {
+  let h = 2166136261;
+  for (const c of s) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+fetch('./data.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(compose)
+  .catch(() => {
+    for (const id of ['tanshin', 'souba', 'silence']) {
+      document.getElementById(id).innerHTML =
+        '<td colspan="3" class="kyusai">データリンク不通につき休載</td>';
+    }
+    document.getElementById('sky').textContent = '休';
+    document.getElementById('ear-sky').textContent = '休載';
+  });
+
+function compose(data) {
+  const now = new Date(data.generatedAt).getTime();
+  const days = (p) => Math.floor((now - new Date(p).getTime()) / 86400000);
+
+  /* 短信: 一面で扱った2件を除き、六十日以内を新しい順に */
+  const featured = new Set(['vercel/next.js', 'prisma/prisma']);
+  const briefs = data.favorites
+    .filter((f) => !featured.has(f.fullName) && days(f.publishedAt) <= 60)
+    .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
+    .map((f) => {
+      const d = days(f.publishedAt);
+      const when = d === 0 ? '本日' : d === 1 ? '昨日' : `${kanji(d)}日前`;
+      const line = f.summary
+        ? f.summary[0].replace(/^・/, '')
+        : `${f.tagName} が着信`;
+      return `<li>▽<b>${esc(f.fullName.split('/')[1])}</b>　${esc(line)}（${when}）</li>`;
+    });
+  document.getElementById('tanshin').innerHTML = briefs.join('');
+
+  /* 相場: トレンド。前日比は名前から決定論で採番(モック) */
+  document.getElementById('souba').innerHTML = data.trending
+    .map((t) => {
+      const delta = 15 + (fnv(t.fullName) % 140);
+      return `<tr><td>${esc(t.fullName)}</td>` +
+        `<td class="num">${t.stars.toLocaleString('ja-JP')}</td>` +
+        `<td class="num up">▲${delta}</td></tr>`;
+    })
+    .join('');
+
+  /* 沈黙の記録: 百八十日超。一年超は太字 */
+  document.getElementById('silence').innerHTML = data.favorites
+    .filter((f) => days(f.publishedAt) > 180)
+    .sort((a, b) => new Date(a.publishedAt) - new Date(b.publishedAt))
+    .map((f) => {
+      const m = Math.floor(days(f.publishedAt) / 30.44);
+      const y = Math.floor(m / 12), rm = m % 12;
+      const span = y ? `${kanji(y)}年${rm ? kanji(rm) + '箇月' : ''}` : `${kanji(m)}箇月`;
+      return `<tr${y ? ' class="dead"' : ''}><td>${esc(f.fullName)}</td>` +
+        `<td>${esc(f.tagName)}</td><td class="num">${span}</td></tr>`;
+    })
+    .join('');
+
+  /* 天気: API残量 */
+  const { remaining, limit } = data.rateLimit;
+  const ratio = remaining / limit;
+  const sky = ratio > 0.5 ? '晴' : ratio > 0.1 ? '曇' : '雨';
+  document.getElementById('sky').textContent = sky;
+  document.getElementById('sky-num').textContent =
+    `${remaining.toLocaleString('ja-JP')} ／ ${limit.toLocaleString('ja-JP')}`;
+  document.getElementById('sky-memo').textContent =
+    ratio > 0.5 ? '終日安定の見込み。掃引に支障なし。' : '節約観測を推奨。';
+  document.getElementById('ear-sky').textContent =
+    `${sky}　${remaining.toLocaleString('ja-JP')}`;
+}
+</script>
+</body>
+</html>

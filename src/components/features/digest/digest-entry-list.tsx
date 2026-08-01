@@ -38,8 +38,12 @@ export function DigestEntryList({ entries }: { entries: DigestEntry[] }) {
               )}
               {entry.summary ? (
                 <p className="mt-1 whitespace-pre-line text-sm text-gray-800">{entry.summary}</p>
-              ) : (
+              ) : (entry.noteless ?? true) ? (
+                // noteless欠落（#36以前のエントリ）は区別できないため従来表示に倒す
                 <p className="mt-1 text-sm text-gray-400">リリースノートなし</p>
+              ) : (
+                // 生成失敗。共有要約プールに行が無いままなので、翌日のバックフィルで自動再試行される
+                <p className="mt-1 text-sm text-gray-400">要約を生成できませんでした</p>
               )}
             </Link>
           </li>

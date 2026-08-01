@@ -96,11 +96,13 @@ test.describe('デイリーダイジェスト', () => {
     ).toBeVisible();
     // 冒頭の総括はルールベース生成（シードの3エントリと対応）
     await expect(page.getByText('3リポジトリ・3リリース（うち破壊的変更1件）')).toBeVisible();
-    // AIの見出しと破壊的変更バッジ（exact指定で総括内の部分一致と区別する）
+    // AIの見出しと破壊的変更バッジ（exact指定で総括内の部分一致と区別する）。
+    // 当日の朝刊シード（E2E_TODAY_DIGEST_ENTRIES）にも破壊的変更・同一リポジトリの
+    // リンクが含まれるため、first()で厳密モード違反を避ける
     await expect(page.getByText(E2E_DIGEST_ENTRIES.entries[0].headline ?? '')).toBeVisible();
-    await expect(page.getByText('破壊的変更', { exact: true })).toBeVisible();
+    await expect(page.getByText('破壊的変更', { exact: true }).first()).toBeVisible();
     // カードはリポジトリ詳細へのリンク
-    await expect(page.getByRole('link', { name: /vercel\/next\.js/ })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: /vercel\/next\.js/ }).first()).toHaveAttribute(
       'href',
       '/repos/vercel/next.js'
     );
@@ -111,13 +113,14 @@ test.describe('デイリーダイジェスト', () => {
     assertNoConsoleErrors();
   });
 
-  test('旧形式（contentのみ）のダイジェストと未生成の案内も表示される', async ({ page }) => {
+  test('旧形式（contentのみ）のダイジェストが表示され、未生成の案内は出ない', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/digest');
 
     await expect(page.getByText(E2E_DIGEST.content)).toBeVisible();
-    // シードは過去日付のみなので、本日分未生成のNoticeが必ず出る
-    await expect(page.getByText('本日分のダイジェストはまだ生成されていません')).toBeVisible();
+    // 当日分の朝刊をシードしている（紙面の一面検証用）ため、未生成のNoticeは出ない。
+    // Notice側の分岐は tests/ のユニットテストで担保する
+    await expect(page.getByText('本日分のダイジェストはまだ生成されていません')).toBeHidden();
 
     assertNoConsoleErrors();
   });

@@ -1,6 +1,8 @@
 // E2Eの固定値。playwright.config.ts / global-setup.ts / fixtures.ts / 各specで共有する。
 // ここを唯一の出所にすることで「サーバー側の設定」と「テスト側の期待値」がずれないようにする。
 
+import { digestWindowFor } from '@/lib/digest-window';
+
 /** アプリ本体。dev（3000番）と衝突させないE2E専用ポート */
 export const APP_PORT = 3100;
 export const APP_BASE_URL = `http://localhost:${APP_PORT}`;
@@ -64,7 +66,18 @@ export const E2E_FAVORITES = [
   { owner: 'colinhacks', name: 'zod' },
   { owner: 'pmndrs', name: 'zustand' },
   { owner: 'nextauthjs', name: 'next-auth' },
+  // 紙面「沈黙の記録」（180日超・一年超は太字）を決定的に踏むための1件（Issue #31）。
+  // モックサーバーはこのownerのリリースだけ数年前の日付で返す
+  { owner: 'silent-archive', name: 'legacy-parser' },
 ] as const;
+
+/**
+ * 紙面「沈黙の記録」の検証用。このプレフィックスで始まるownerのリリースは、
+ * モックサーバーが数年前の固定日付で返す（他のownerはサーバー起動時からの相対日付）。
+ * 相対日付にしたのは、固定日付だと実時間の経過で短信（60日以内）から静かに消え、
+ * 半年後に全リポジトリが沈黙の記録へ雪崩れ込む時限爆弾になるため
+ */
+export const SILENT_OWNER_PREFIX = 'silent';
 
 /**
  * シードするダイジェスト（朝刊化以前の旧形式 = contentのみ）。旧データの表示互換を検証する。
@@ -126,6 +139,54 @@ export const E2E_DIGEST_ENTRIES = {
     },
   ],
 };
+
+/**
+ * 「当日の朝刊」の帰属日（YYYY-MM-DD）。アプリと同じ窓計算（digest-window.ts は
+ * prisma/envに依存しない純関数モジュールなのでE2E側から直接importできる）。
+ * `dayOffset` は窓終端からの日数（+1 = 翌日の窓）
+ */
+export function e2eDigestDay(dayOffset = 0, now = new Date()): string {
+  const end = digestWindowFor(now).end;
+  end.setUTCDate(end.getUTCDate() + dayOffset);
+  return end.toISOString().slice(0, 10);
+}
+
+/**
+ * 紙面の一面・二番手を検証するための「当日の朝刊」entries（Issue #31）。
+ * global-setup が当日窓と翌日窓の2日分をこの内容でシードする。翌日分も入れるのは、
+ * global-setupとテスト実行の間に21:00 UTC境界を跨いでも一面が休載にならないため。
+ * 1件目（破壊的変更・headline/lede付き）が一面、2件目が二番手に選ばれる想定
+ * （src/lib/paper.ts の pickFrontPage の決定則）。
+ * 文言は E2E_DIGEST_ENTRIES（2026-07-02の履歴シード）と重複させない
+ */
+export const E2E_TODAY_DIGEST_ENTRIES = [
+  {
+    owner: 'vercel',
+    repo: 'next.js',
+    fullName: 'vercel/next.js',
+    tagName: 'v16.4.0',
+    releaseName: 'v16.4.0',
+    publishedAt: '2026-08-02T03:00:00Z',
+    headline: 'キャッシュ既定、静かに反転',
+    lede: '米Vercel社は未明、v16.4.0を公開した。ビルドキャッシュの既定値を反転させる変更が柱である。',
+    summary: '・ビルドキャッシュの既定値を反転\n・PPRの安定化\n・画像最適化を高速化',
+    hasBreaking: true,
+    noteless: false,
+  },
+  {
+    owner: 'prisma',
+    repo: 'prisma',
+    fullName: 'prisma/prisma',
+    tagName: 'v7.4.0',
+    releaseName: '7.4.0',
+    publishedAt: '2026-08-02T01:00:00Z',
+    headline: 'TypedSQL、複数スキーマへ',
+    lede: 'Prismaは7.4.0でTypedSQLのマルチスキーマ対応を果たした。',
+    summary: '・TypedSQLがマルチスキーマ対応\n・診断ログを増強\n・接続プールの既定値を調整',
+    hasBreaking: false,
+    noteless: false,
+  },
+];
 
 /** リポジトリ詳細の404経路を踏むためのowner。モックサーバーはこのownerに対して404を返す */
 export const MISSING_OWNER = 'missing';

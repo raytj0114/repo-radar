@@ -30,6 +30,8 @@ const slowOwnerPrefix = process.env.MOCK_GITHUB_SLOW_OWNER_PREFIX;
 const slowMs = Number(process.env.MOCK_GITHUB_SLOW_MS);
 /** このプレフィックスで始まるownerへの応答は残量フロア未満を報告する（縮退表示の検証用） */
 const rateLimitedOwnerPrefix = process.env.MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX;
+/** このプレフィックスで始まるownerのリリースは数年前の日付で返す（紙面「沈黙の記録」の検証用） */
+const silentOwnerPrefix = process.env.MOCK_GITHUB_SILENT_OWNER_PREFIX;
 
 if (
   !Number.isInteger(port) ||
@@ -37,10 +39,11 @@ if (
   !failingReleasesName ||
   !slowOwnerPrefix ||
   !Number.isInteger(slowMs) ||
-  !rateLimitedOwnerPrefix
+  !rateLimitedOwnerPrefix ||
+  !silentOwnerPrefix
 ) {
   throw new Error(
-    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS / MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX を指定してください'
+    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS / MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX / MOCK_GITHUB_SILENT_OWNER_PREFIX を指定してください'
   );
 }
 
@@ -84,9 +87,25 @@ function repositoryFor(owner, name) {
   };
 }
 
+/**
+ * 通常ownerのリリース日付は「サーバー起動時から数えた相対日付」で返す。
+ * data/releases.json の固定日付のままだと、実時間の経過で紙面の短信（60日以内）から
+ * 静かに消え、半年後には全員が沈黙の記録（180日超）へ雪崩れ込む時限爆弾になるため。
+ * draft（published_at=null）はそのまま残す
+ */
+const DAY_MS = 24 * 60 * 60 * 1000;
+const startedAt = Date.now();
+const daysAgo = (days) => new Date(startedAt - days * DAY_MS).toISOString();
+/** 新しい順に14日前から1日刻み。並び順はGitHub APIと同じく配列順（作成順）を保つ */
+const freshDates = releasesTemplate.map((_, index) => daysAgo(14 - index));
+/** 沈黙owner用: 数年前で固定し、「一年超は太字」の分岐を永続的・決定的に踏む */
+const silentDates = releasesTemplate.map((_, index) => daysAgo(365 * 3 - index));
+
 function releasesFor(owner, name) {
-  return releasesTemplate.map((release) => ({
+  const dates = owner.startsWith(silentOwnerPrefix) ? silentDates : freshDates;
+  return releasesTemplate.map((release, index) => ({
     ...release,
+    published_at: release.published_at === null ? null : dates[index],
     html_url: `https://github.com/${owner}/${name}/releases/tag/${release.tag_name}`,
   }));
 }
@@ -123,6 +142,17 @@ function handle(req, res, url) {
       200,
       requestLog.filter((entry) => entry.path.startsWith(prefix))
     );
+    return;
+  }
+
+  // GET /rate_limit（紙面の天気欄。レート枠を消費しない実APIと同じく、bodyで残量を返す）
+  if (url.pathname === '/rate_limit') {
+    send(res, 200, {
+      resources: {
+        core: { limit: 5000, remaining: Number(REMAINING.core), reset: 0 },
+        search: { limit: 30, remaining: Number(REMAINING.search), reset: 0 },
+      },
+    });
     return;
   }
 

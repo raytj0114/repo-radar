@@ -1,0 +1,142 @@
+{
+  "generatedAt": "2026-07-31T12:00:00Z",
+  "generatedAtLabel": "2026-07-31 21:00 JST",
+  "rateLimit": { "remaining": 4812, "limit": 5000 },
+  "favorites": [
+    {
+      "fullName": "vercel/next.js",
+      "language": "TypeScript",
+      "tagName": "v16.2.1",
+      "publishedAt": "2026-07-31T07:40:00Z",
+      "summary": [
+        "・Turbopackのキャッシュ既定値を反転、全面適用に",
+        "・App RouterでPPRが安定版に昇格",
+        "・画像最適化のメモリ使用量を約40%削減"
+      ]
+    },
+    {
+      "fullName": "prisma/prisma",
+      "language": "TypeScript",
+      "tagName": "6.14.0",
+      "publishedAt": "2026-07-30T18:05:00Z",
+      "summary": [
+        "・TypedSQLがマルチスキーマ構成に対応",
+        "・接続プール枯渇時に詳細な診断ログを出力",
+        "・Postgres 18の新JSON関数をネイティブ対応"
+      ]
+    },
+    {
+      "fullName": "tailwindlabs/tailwindcss",
+      "language": "TypeScript",
+      "tagName": "v4.2.3",
+      "publishedAt": "2026-07-29T09:30:00Z",
+      "summary": [
+        "・@themeのCSS変数解決の回帰を修正",
+        "・コンテナクエリ変種の生成漏れを修正",
+        "・大規模プロジェクトのビルドを15%短縮"
+      ]
+    },
+    {
+      "fullName": "microsoft/playwright",
+      "language": "TypeScript",
+      "tagName": "v1.55.0",
+      "publishedAt": "2026-07-28T13:00:00Z",
+      "summary": [
+        "・a11yツリーのスナップショット比較を追加",
+        "・モバイルエミュレーションに折りたたみ端末",
+        "・trace viewerがネットワーク本文検索に対応"
+      ]
+    },
+    {
+      "fullName": "microsoft/TypeScript",
+      "language": "TypeScript",
+      "tagName": "v6.0-beta",
+      "publishedAt": "2026-07-24T16:00:00Z",
+      "summary": [
+        "・型引数の部分推論を実験的に導入",
+        "・Node16モジュール解決の非推奨化を正式告知",
+        "・破壊的変更: enumの数値逆引きを既定で無効化"
+      ]
+    },
+    {
+      "fullName": "vitest-dev/vitest",
+      "language": "TypeScript",
+      "tagName": "v4.1.2",
+      "publishedAt": "2026-07-21T08:00:00Z",
+      "summary": [
+        "・ブラウザモードのworkspace対応を修正",
+        "・型テストwatch時のメモリリークを解消",
+        "・シャーディング時のレポート結合を安定化"
+      ]
+    },
+    {
+      "fullName": "facebook/react",
+      "language": "JavaScript",
+      "tagName": "v20.0.0",
+      "publishedAt": "2026-07-10T15:00:00Z",
+      "summary": [
+        "・破壊的変更: レガシーContext APIを完全削除",
+        "・Activityコンポーネントが安定版に",
+        "・React Compilerが既定で有効化"
+      ]
+    },
+    {
+      "fullName": "TanStack/query",
+      "language": "TypeScript",
+      "tagName": "v6.2.0",
+      "publishedAt": "2026-06-20T11:00:00Z",
+      "summary": [
+        "・queryOptionsのinfinite対応を追加",
+        "・SSRハイドレーション不一致の警告を改善",
+        "・GCタイミングをクエリ単位で上書き可能に"
+      ]
+    },
+    {
+      "fullName": "colinhacks/zod",
+      "language": "TypeScript",
+      "tagName": "v4.3.5",
+      "publishedAt": "2026-06-28T20:00:00Z",
+      "summary": null
+    },
+    {
+      "fullName": "vercel/swr",
+      "language": "TypeScript",
+      "tagName": "2.4.0",
+      "publishedAt": "2026-05-15T09:00:00Z",
+      "summary": null
+    },
+    {
+      "fullName": "pmndrs/zustand",
+      "language": "TypeScript",
+      "tagName": "v5.1.0",
+      "publishedAt": "2026-04-02T14:00:00Z",
+      "summary": [
+        "・ミドルウェアの型推論を全面的に書き直し",
+        "・shallow比較のエッジケースを修正",
+        "・devtoolsのaction名自動推定を追加"
+      ]
+    },
+    {
+      "fullName": "expressjs/express",
+      "language": "JavaScript",
+      "tagName": "5.1.0",
+      "publishedAt": "2025-09-10T12:00:00Z",
+      "summary": null
+    },
+    {
+      "fullName": "auth0/node-jsonwebtoken",
+      "language": "JavaScript",
+      "tagName": "v9.0.2",
+      "publishedAt": "2023-08-28T10:00:00Z",
+      "summary": null
+    }
+  ],
+  "trending": [
+    { "fullName": "astral-sh/ty", "stars": 9402 },
+    { "fullName": "hikari-lang/hikari", "stars": 4821 },
+    { "fullName": "cascade-db/cascade", "stars": 3210 },
+    { "fullName": "loomworks/loom", "stars": 2954 },
+    { "fullName": "sora-ui/sora", "stars": 2711 },
+    { "fullName": "wasmforge/forge", "stars": 1877 }
+  ]
+}

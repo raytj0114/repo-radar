@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RepoRadar — 管制室 (MOCK 01)</title>
+<style>
+  :root {
+    --ph: #46ff8a;            /* 燐光 (P1 phosphor) */
+    --ph-dim: rgba(70, 255, 138, 0.35);
+    --ph-faint: rgba(70, 255, 138, 0.16);
+    --bg: #020a06;
+    --panel: rgba(4, 26, 15, 0.55);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(120% 90% at 50% 30%, #04140c 0%, var(--bg) 60%, #010503 100%);
+    color: var(--ph);
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, "Courier New", monospace;
+    text-shadow: 0 0 5px rgba(70, 255, 138, 0.4);
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--ph); color: var(--bg); text-shadow: none; }
+
+  header {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--ph-faint);
+    flex-wrap: wrap;
+  }
+  .title { font-size: 15px; letter-spacing: 0.22em; white-space: nowrap; }
+  .title .jp { letter-spacing: 0.35em; opacity: 0.85; }
+  .title .mock { font-style: normal; font-size: 10px; opacity: 0.5; letter-spacing: 0.1em; margin-left: 8px; }
+  .signal { font-size: 12px; letter-spacing: 0.08em; opacity: 0.9; white-space: nowrap; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 350px;
+    gap: 18px;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 18px 16px 8px;
+    align-items: start;
+  }
+  .scope {
+    position: relative;
+    width: min(100%, calc(100vh - 190px));
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .scanlines {
+    position: absolute; inset: 0; pointer-events: none; border-radius: 50%;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+    animation: flicker 4s infinite steps(2);
+  }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none; border-radius: 50%;
+    background: radial-gradient(circle, transparent 52%, rgba(0, 0, 0, 0.6) 100%);
+  }
+  @keyframes flicker { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.45; } }
+
+  .readout {
+    border: 1px solid var(--ph-dim);
+    background: var(--panel);
+    min-height: 300px;
+    display: flex; flex-direction: column;
+  }
+  .readout-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; letter-spacing: 0.3em;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--ph-faint);
+  }
+  .lamp {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ph); box-shadow: 0 0 8px var(--ph);
+    opacity: 0.25; transition: opacity 0.2s;
+  }
+  .lamp.on { opacity: 1; animation: lamp 0.6s infinite alternate; }
+  @keyframes lamp { from { opacity: 1; } to { opacity: 0.45; } }
+  #tty {
+    margin: 0; padding: 12px 14px;
+    font: inherit; font-size: 12.5px; line-height: 1.85;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    flex: 1;
+  }
+
+  footer {
+    max-width: 1080px; margin: 0 auto;
+    padding: 10px 16px 16px;
+    font-size: 10.5px; letter-spacing: 0.08em;
+    opacity: 0.55;
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+  }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; gap: 14px; padding: 14px 12px 6px; }
+    .scope { width: 100%; }
+    .readout { min-height: 220px; }
+    .title { font-size: 13px; }
+    #tty { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scanlines { animation: none; }
+    .lamp.on { animation: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">REPORADAR <span class="jp">管制室</span><em class="mock">MOCK-01</em></div>
+  <div class="signal" id="signal">SIGNAL ----</div>
+</header>
+<main>
+  <section class="scope" id="scope" aria-label="レーダースコープ">
+    <canvas id="radar"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+  </section>
+  <aside class="readout" aria-label="リードアウト">
+    <div class="readout-head">READOUT <span class="lamp" id="lamp"></span></div>
+    <pre id="tty"></pre>
+  </aside>
+</main>
+<footer id="status"></footer>
+
+<script>
+'use strict';
+/* ============================================================
+   RepoRadar 管制室 — モック
+   data.json（凍結データ）を読み、実装なしで体験だけを再現する。
+   時刻は data.generatedAt を「いま」として固定する。
+   ============================================================ */
+const TAU = Math.PI * 2;
+const SWEEP_MS = 8000;             // 一掃引8秒
+const NEW_HOURS = 48;              // これ以内のリリースは「新着機影」
+const OLD_HOURS = 24 * 300;        // これを超えると減光（消えかけの機影)
+const CPS = 26;                    // テレタイプの文字/秒
+/* OSが動きを抑制していても ?motion=1 で掃引を強制起動できる（?static=1 で逆) */
+const params = new URLSearchParams(location.search);
+const REDUCED = params.has('static')
+  || (matchMedia('(prefers-reduced-motion: reduce)').matches && !params.has('motion'));
+
+const canvas = document.getElementById('radar');
+const ctx = canvas.getContext('2d');
+const tty = document.getElementById('tty');
+const lamp = document.getElementById('lamp');
+
+let contacts = [];     // お気に入り = 機影
+let ghosts = [];       // トレンド = 未識別機
+let frozenLabel = '';
+let size = 0, dpr = 1;
+let sweep = 0, prevSweep = 0, t0 = null;
+let hovered = null, locked = null;
+let typing = { text: '', shown: 0, lastT: 0 };
+
+/* ---- 決定論の道具: 名前 → 方位。毎朝同じ場所に同じ機影がいる ---- */
+function fnv(s) {
+  let h = 2166136261;
+  for (const c of s) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+const bearing = (s) => (fnv(s) / 4294967296) * TAU - Math.PI / 2; // 0時方向基準
+/* 距離 = 最終リリースからの経過時間の対数。24H/7D/30D/1Y がリングに一致する */
+function radiusNorm(hours) {
+  const r = -0.1271 + 0.2732 * Math.log10(Math.max(hours, 0.5));
+  return Math.min(0.97, Math.max(0.07, r));
+}
+const RINGS = [
+  { hours: 24, label: '24H' },
+  { hours: 24 * 7, label: '7D' },
+  { hours: 24 * 30, label: '30D' },
+  { hours: 24 * 365, label: '1Y' },
+];
+
+function fmtT(hours) {
+  if (hours < 48) return `T-${Math.round(hours)}H`;
+  if (hours < 24 * 60) return `T-${Math.round(hours / 24)}D`;
+  if (hours < 24 * 730) return `T-${Math.round(hours / 720)}MO`;
+  return `T-${(hours / 8760).toFixed(1)}Y`;
+}
+const jst = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
+/* ---- データリンク ---- */
+fetch('./data.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(init)
+  .catch(() => {
+    tty.textContent =
+      'DATA LINK LOST\n\ndata.json を読み込めません。\nローカルファイル直開きでは fetch が\nブロックされます。dev サーバー経由で\n/mocks/01-control-room.html を開いて\nください。';
+  });
+
+function init(data) {
+  const now = new Date(data.generatedAt).getTime();
+  frozenLabel = data.generatedAtLabel;
+
+  contacts = data.favorites.map((f) => {
+    const hours = (now - new Date(f.publishedAt).getTime()) / 3600000;
+    return {
+      ...f, hours,
+      angle: bearing(f.fullName),
+      r: radiusNorm(hours),
+      isNew: hours <= NEW_HOURS,
+      isOld: hours >= OLD_HOURS,
+      x: 0, y: 0, // 画面座標（毎フレーム更新、ヒットテスト用)
+    };
+  });
+  ghosts = data.trending.map((g, i) => ({
+    ...g,
+    angle: bearing(g.fullName),
+    r: 0.88 + ((fnv(g.fullName + '#r') % 1000) / 1000) * 0.09,
+    seed: (fnv(g.fullName + '#s') % 1000) / 1000 * TAU,
+  }));
+
+  const { remaining, limit } = data.rateLimit;
+  const bars = Math.round((remaining / limit) * 10);
+  document.getElementById('signal').textContent =
+    `SIGNAL ${'▮'.repeat(bars)}${'▯'.repeat(10 - bars)} ${remaining}/${limit}`;
+  document.getElementById('status').innerHTML =
+    `<span>SWEEP 8.0S</span><span>CONTACTS ${contacts.length}</span>` +
+    `<span>UNIDENTIFIED ${ghosts.length}</span><span>SCALE LOG(T)</span>` +
+    `<span>DATA FROZEN ${frozenLabel}</span>` +
+    (REDUCED ? '<span>REDUCED MOTION</span>' : '');
+
+  boot();
+}
+
+function boot() {
+  setType(
+    `REPORADAR SCOPE v0.1\nINITIALIZING .....\nCONTACTS ${contacts.length} / UNIDENTIFIED ${ghosts.length}\nSWEEP 8.0S — STANDBY\n\nAWAITING SWEEP ...`,
+  );
+  t0 = performance.now() + (REDUCED ? 0 : 600);
+  requestAnimationFrame(frame);
+}
+
+/* ---- テレタイプ ---- */
+function setType(text) {
+  typing = { text, shown: 0, lastT: performance.now() };
+}
+function contactText(c) {
+  const pub = jst.format(new Date(c.publishedAt)).replace(/\//g, '-');
+  let s =
+    `CONTACT  ${c.fullName}\n` +
+    `TAG      ${c.tagName}\n` +
+    `CLASS    ${c.language}   ${fmtT(c.hours)}\n` +
+    `LAST     ${pub} JST\n` +
+    `${'─'.repeat(21)}\n`;
+  s += c.summary ? c.summary.join('\n') : 'NO TRANSCRIPT\n(要約未生成 — 掃引では生成しない)';
+  return s;
+}
+function tickType(t) {
+  if (typing.shown < typing.text.length) {
+    typing.shown = Math.min(
+      typing.text.length,
+      typing.shown + ((t - typing.lastT) / 1000) * CPS,
+    );
+    lamp.classList.add('on');
+  } else {
+    lamp.classList.remove('on');
+  }
+  typing.lastT = t;
+  const cursor = typing.shown < typing.text.length || t % 1100 < 550 ? '█' : ' ';
+  tty.textContent = typing.text.slice(0, Math.floor(typing.shown)) + cursor;
+}
+
+/* ---- 描画 ---- */
+function resize() {
+  const el = document.getElementById('scope');
+  dpr = Math.min(devicePixelRatio || 1, 2);
+  size = el.clientWidth;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+}
+new ResizeObserver(resize).observe(document.getElementById('scope'));
+resize();
+
+function frame(t) {
+  const cx = (size * dpr) / 2, cy = cx;
+  const R = cx * 0.92;
+  prevSweep = sweep;
+  sweep = REDUCED ? -Math.PI / 2 : (((Math.max(0, t - t0) / SWEEP_MS) % 1) * TAU) - Math.PI / 2;
+
+  ctx.clearRect(0, 0, size * dpr, size * dpr);
+  ctx.save();
+  ctx.translate(0, 0);
+
+  // スコープ盤面
+  const disc = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  disc.addColorStop(0, 'rgba(20, 60, 38, 0.35)');
+  disc.addColorStop(1, 'rgba(4, 18, 11, 0.9)');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+
+  // 距離リング + ラベル
+  ctx.strokeStyle = 'rgba(70,255,138,0.20)';
+  ctx.fillStyle = 'rgba(70,255,138,0.50)';
+  ctx.lineWidth = 1 * dpr;
+  ctx.font = `${9 * dpr}px ui-monospace, monospace`;
+  ctx.textAlign = 'center';
+  for (const ring of RINGS) {
+    const r = radiusNorm(ring.hours) * R;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+    ctx.fillText(ring.label, cx, cy - r + 11 * dpr);
+  }
+  // 外周と方位目盛
+  ctx.strokeStyle = 'rgba(70,255,138,0.35)';
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+  for (let d = 0; d < 360; d += 15) {
+    const a = (d / 360) * TAU - Math.PI / 2;
+    const len = d % 90 === 0 ? 8 : 4;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * (R - len * dpr), cy + Math.sin(a) * (R - len * dpr));
+    ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(70,255,138,0.35)';
+  for (const [d, l] of [[0, '000'], [90, '090'], [180, '180'], [270, '270']]) {
+    const a = (d / 360) * TAU - Math.PI / 2;
+    ctx.fillText(l, cx + Math.cos(a) * (R - 20 * dpr), cy + Math.sin(a) * (R - 20 * dpr) + 3 * dpr);
+  }
+  // 自機
+  ctx.strokeStyle = 'rgba(70,255,138,0.6)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 6 * dpr, cy); ctx.lineTo(cx + 6 * dpr, cy);
+  ctx.moveTo(cx, cy - 6 * dpr); ctx.lineTo(cx, cy + 6 * dpr);
+  ctx.stroke();
+
+  // 掃引の燐光（後方に減衰する扇)
+  if (!REDUCED && ctx.createConicGradient) {
+    const wedge = 1.15; // rad
+    const g = ctx.createConicGradient(sweep - wedge, cx, cy);
+    g.addColorStop(0, 'rgba(70,255,138,0)');
+    g.addColorStop(wedge / TAU, 'rgba(70,255,138,0.30)');
+    g.addColorStop(wedge / TAU + 0.002, 'rgba(70,255,138,0)');
+    g.addColorStop(1, 'rgba(70,255,138,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+  }
+  // 掃引線
+  if (!REDUCED) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(140,255,190,0.9)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.shadowColor = '#46ff8a';
+    ctx.shadowBlur = 14 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(sweep) * R, cy + Math.sin(sweep) * R);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 未識別機（トレンド）: 外縁のノイズ
+  for (const g of ghosts) {
+    const flick = 0.5 + 0.5 * Math.sin(t / 300 + g.seed) * Math.sin(t / 1370 + g.seed * 2);
+    const boost = sweepBoost(g.angle);
+    const a = Math.max(0, flick * 0.20 + boost * 0.35);
+    if (a < 0.03) continue;
+    ctx.fillStyle = `rgba(70,255,138,${a.toFixed(3)})`;
+    const gx = cx + Math.cos(g.angle) * g.r * R;
+    const gy = cy + Math.sin(g.angle) * g.r * R;
+    ctx.beginPath(); ctx.arc(gx, gy, 1.6 * dpr, 0, TAU); ctx.fill();
+  }
+
+  // 機影（お気に入り)
+  ctx.font = `${10 * dpr}px ui-monospace, monospace`;
+  ctx.textAlign = 'left';
+  for (const c of contacts) {
+    const floor = c.isNew ? 0.45 : c.isOld ? 0.10 : 0.17;
+    const decay = REDUCED ? 0.75 : Math.pow(1 - angBehind(c.angle) / TAU, 1.7);
+    const i = floor + (1 - floor) * decay;
+    const x = cx + Math.cos(c.angle) * c.r * R;
+    const y = cy + Math.sin(c.angle) * c.r * R;
+    c.x = x / dpr; c.y = y / dpr;
+
+    // 新着は円周方向に短い尾を引く
+    if (c.isNew && !REDUCED) {
+      for (let k = 1; k <= 5; k++) {
+        ctx.strokeStyle = `rgba(70,255,138,${(i * 0.28 * (1 - k / 6)).toFixed(3)})`;
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.arc(cx, cy, c.r * R, c.angle - 0.055 * (k + 1), c.angle - 0.055 * k);
+        ctx.stroke();
+      }
+    }
+    ctx.save();
+    ctx.shadowColor = '#46ff8a';
+    ctx.shadowBlur = (6 + 12 * i) * dpr;
+    ctx.fillStyle = `rgba(120,255,170,${(0.25 + 0.75 * i).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(x, y, (c.isNew ? 3.4 : c.isOld ? 2.2 : 2.8) * dpr, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    if (c.isNew) {
+      ctx.fillStyle = `rgba(70,255,138,${(0.35 + 0.6 * i).toFixed(3)})`;
+      ctx.fillText(c.tagName, x + 7 * dpr, y - 6 * dpr);
+    }
+    if (c === locked || c === hovered) {
+      ctx.strokeStyle = 'rgba(140,255,190,0.85)';
+      ctx.lineWidth = 1 * dpr;
+      if (c === hovered && c !== locked) ctx.setLineDash([3 * dpr, 3 * dpr]);
+      ctx.beginPath(); ctx.arc(x, y, 8 * dpr, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      if (c === locked) ctx.fillText('TRK', x + 7 * dpr, y + 12 * dpr);
+    }
+
+    // 掃引がこの機影を通過した瞬間、リードアウトを更新
+    if (!REDUCED && !locked && crossed(c.angle)) setType(contactText(c));
+  }
+
+  ctx.restore();
+  tickType(t);
+  requestAnimationFrame(frame);
+}
+
+function angBehind(a) { return (sweep - a + TAU * 2) % TAU; }
+function sweepBoost(a) { return REDUCED ? 0.4 : Math.pow(1 - angBehind(a) / TAU, 3); }
+function crossed(a) {
+  const span = (sweep - prevSweep + TAU) % TAU;
+  if (span <= 0 || span > 1) return false; // 初回・タブ復帰の巨大ジャンプは無視
+  return (a - prevSweep + TAU) % TAU <= span;
+}
+
+/* ---- ヒットテスト: hoverで識別票、クリック/タップで追尾ロック ---- */
+function pick(ev) {
+  const rect = canvas.getBoundingClientRect();
+  const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+  let best = null, bd = 18;
+  for (const c of contacts) {
+    const d = Math.hypot(c.x - px, c.y - py);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+canvas.addEventListener('pointermove', (ev) => {
+  hovered = pick(ev);
+  canvas.style.cursor = hovered ? 'pointer' : 'default';
+});
+canvas.addEventListener('click', (ev) => {
+  const hit = pick(ev);
+  if (hit) { locked = hit; setType(contactText(hit) + '\n\n[TRACKING — 再クリックで解除]'); }
+  else if (locked) { locked = null; setType('TRACK RELEASED\nAWAITING SWEEP ...'); }
+});
+</script>
+</body>
+</html>

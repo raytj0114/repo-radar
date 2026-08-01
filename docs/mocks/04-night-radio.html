@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JORR 深夜放送 — RepoRadar Radio (MOCK 04)</title>
+<style>
+  /* ============================================================
+     深夜放送 — 画面はラジオチューナーだけ。
+     番組表も、原稿も、進捗バーも出さない。放送は音にしか存在しない。
+     最良のセッションは、画面を見ないこと。
+     ============================================================ */
+  :root {
+    --amber: #ffb45e;
+    --amber-dim: #7a5228;
+    --wood1: #55371f;
+    --wood2: #2c1a0c;
+    --face: #171008;
+    --cream: #e6d5a8;
+    --needle: #c8452c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(120% 100% at 50% 20%, #120b06 0%, #070402 55%, #030201 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+
+  /* ---- 筐体 ---- */
+  .unit { width: min(560px, calc(100vw - 24px)); }
+  .cabinet {
+    background:
+      linear-gradient(175deg, rgba(255, 190, 120, 0.10), rgba(0, 0, 0, 0.35) 60%),
+      repeating-linear-gradient(92deg, var(--wood1) 0 7px, #4a2f1a 7px 11px, var(--wood1) 11px 23px),
+      var(--wood2);
+    border-radius: 14px;
+    padding: 18px 18px 14px;
+    box-shadow:
+      0 18px 50px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 rgba(255, 210, 150, 0.18),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.6);
+  }
+  .facepanel {
+    background: linear-gradient(180deg, #1d1409, var(--face) 40%, #100a05);
+    border-radius: 8px;
+    padding: 14px 16px 16px;
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.9), inset 0 0 0 1px rgba(255, 200, 140, 0.07);
+  }
+
+  /* ---- ダイヤル盤 ---- */
+  .dial {
+    position: relative;
+    height: 84px;
+    background: linear-gradient(180deg, #241708, #1a1006);
+    border-radius: 5px;
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+    cursor: pointer;
+    touch-action: none;
+    transition: box-shadow 1.4s;
+  }
+  .unit.on .dial {
+    box-shadow: inset 0 0 26px rgba(255, 157, 60, 0.16), inset 0 0 14px rgba(0, 0, 0, 0.7);
+  }
+  .dial .tick { position: absolute; bottom: 26px; width: 1px; background: var(--amber-dim); transition: background 1.4s; }
+  .unit.on .dial .tick { background: var(--amber); opacity: 0.75; }
+  .dial .freqnum {
+    position: absolute; top: 10px; transform: translateX(-50%);
+    font-size: 10px; letter-spacing: 0.05em; color: var(--amber-dim); transition: color 1.4s;
+  }
+  .unit.on .dial .freqnum { color: var(--amber); }
+  .dial .stname {
+    position: absolute; bottom: 6px; transform: translateX(-50%);
+    font-size: 9px; letter-spacing: 0.15em; color: var(--amber-dim);
+    white-space: nowrap; transition: color 1.4s, text-shadow 1.4s;
+  }
+  .unit.on .dial .stname { color: var(--amber); text-shadow: 0 0 6px rgba(255, 157, 60, 0.7); }
+  .dial .stmark { position: absolute; bottom: 26px; width: 3px; height: 20px; background: var(--amber-dim); transform: translateX(-1px); transition: background 1.4s, box-shadow 1.4s; }
+  .unit.on .dial .stmark { background: var(--amber); box-shadow: 0 0 8px rgba(255, 157, 60, 0.8); }
+  .dial .needle {
+    position: absolute; top: 4px; bottom: 4px; width: 2px;
+    background: var(--needle);
+    box-shadow: 0 0 6px rgba(200, 69, 44, 0.9);
+    transition: left 0.14s linear;
+  }
+
+  /* ---- 計器列: VU / ニキシー窓 ---- */
+  .meters { display: flex; gap: 14px; margin-top: 14px; align-items: stretch; }
+  .vu {
+    flex: 1; min-width: 0; height: 74px; position: relative;
+    background: radial-gradient(140% 120% at 50% 115%, #3a2c12, #241a0a 70%);
+    border-radius: 6px;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+    transition: background 1.4s;
+  }
+  .unit.on .vu { background: radial-gradient(140% 120% at 50% 115%, #6b5424, #33270e 75%); }
+  .vu .arc {
+    position: absolute; left: 10%; right: 10%; top: 12px; height: 44px;
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    border-top: 2px solid var(--amber-dim);
+    transition: border-color 1.4s;
+  }
+  .unit.on .vu .arc { border-color: var(--cream); }
+  .vu .redzone {
+    position: absolute; right: 10%; top: 12px; width: 22%; height: 44px;
+    border-radius: 0 100% 0 0 / 0 100% 0 0;
+    border-top: 2px solid transparent;
+  }
+  .unit.on .vu .redzone { border-color: var(--needle); }
+  .vu .vlabel {
+    position: absolute; bottom: 6px; width: 100%; text-align: center;
+    font-size: 9px; letter-spacing: 0.5em; color: var(--amber-dim); transition: color 1.4s;
+  }
+  .unit.on .vu .vlabel { color: var(--cream); }
+  .vu .vneedle {
+    position: absolute; left: 50%; bottom: 8px; width: 2px; height: 52px;
+    background: #14100a;
+    transform-origin: 50% 100%;
+    transform: rotate(-48deg);
+  }
+  .unit.on .vu .vneedle { background: #0c0906; }
+
+  .nixiebox { width: 42%; display: flex; flex-direction: column; gap: 6px; }
+  .nixie {
+    flex: 1;
+    background: #0b0603;
+    border-radius: 6px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 1), inset 0 0 0 1px rgba(255, 157, 60, 0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 21px; letter-spacing: 0.12em;
+    color: transparent;
+    transition: color 1.4s, text-shadow 1.4s;
+    white-space: nowrap; overflow: hidden;
+    font-variant-numeric: tabular-nums;
+  }
+  .unit.on .nixie {
+    color: var(--amber);
+    text-shadow: 0 0 10px rgba(255, 157, 60, 0.95), 0 0 26px rgba(255, 120, 30, 0.5);
+  }
+  .bandlabel { text-align: center; font-size: 9px; letter-spacing: 0.4em; color: var(--amber-dim); }
+
+  /* ---- 操作列: 電源 / ツマミ ---- */
+  .controls { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
+  .power { position: relative; cursor: pointer; }
+  .pw-plate { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .pw-switch {
+    width: 46px; height: 24px; border-radius: 12px;
+    background: #241a0e;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
+    position: relative; transition: background 0.6s;
+  }
+  .pw-switch::after {
+    content: ""; position: absolute; top: 3px; left: 4px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(180deg, #8a6a45, #4a3520);
+    transition: left 0.25s;
+  }
+  .unit.on .pw-switch { background: #3a2a12; }
+  .unit.on .pw-switch::after { left: 24px; background: linear-gradient(180deg, #ffce8a, #b07c3e); box-shadow: 0 0 8px rgba(255, 180, 94, 0.6); }
+  .pw-label { font-size: 9px; letter-spacing: 0.45em; color: var(--amber-dim); }
+  .tag {
+    position: absolute; left: 54px; top: -6px; width: 118px;
+    background: #d9c99a; color: #3a2c14;
+    font-family: "Segoe Script", "Yu Mincho", cursive;
+    font-size: 11px; line-height: 1.5; text-align: center;
+    padding: 6px 8px; border-radius: 2px;
+    transform: rotate(4deg);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+    transition: opacity 1s;
+  }
+  .tag::before {
+    content: ""; position: absolute; left: -12px; top: 10px; width: 14px; height: 1px;
+    background: #9a8a60; transform: rotate(-25deg);
+  }
+  .unit.on .tag { opacity: 0; pointer-events: none; }
+
+  .knob {
+    width: 92px; height: 92px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 34% 30%, #6a4c2c, #241708 68%),
+      #241708;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 210, 150, 0.25);
+    position: relative; cursor: grab;
+    touch-action: none;
+    flex: none;
+  }
+  .knob:active { cursor: grabbing; }
+  .knob .dot {
+    position: absolute; left: 50%; top: 9px; width: 7px; height: 7px; margin-left: -3.5px;
+    border-radius: 50%; background: var(--cream);
+    box-shadow: 0 0 5px rgba(230, 213, 168, 0.6);
+  }
+  .knob .klabel {
+    position: absolute; bottom: -18px; width: 100%; text-align: center;
+    font-size: 9px; letter-spacing: 0.4em; color: var(--amber-dim);
+  }
+
+  .nameplate {
+    margin-top: 14px; text-align: center;
+    font-size: 8.5px; letter-spacing: 0.45em; color: rgba(255, 200, 140, 0.28);
+  }
+
+  /* ---- 消灯(聴取中は部屋が暗くなる)と、ひとことだけの囁き ---- */
+  .dim {
+    position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none;
+    transition: opacity 7s ease-in;
+  }
+  .whisper {
+    position: fixed; left: 0; right: 0; bottom: 9%;
+    text-align: center;
+    font-size: 13px; letter-spacing: 0.5em; text-indent: 0.5em;
+    color: rgba(255, 200, 140, 0.0);
+    transition: color 2.5s;
+    pointer-events: none;
+  }
+  .whisper.show { color: rgba(255, 200, 140, 0.55); }
+
+  @media (max-width: 480px) {
+    body { align-items: flex-start; }
+    .unit { margin-top: 8vh; }
+    .cabinet { padding: 12px 12px 10px; }
+    .facepanel { padding: 12px 12px 14px; }
+    .dial { height: 76px; }
+    .meters { flex-direction: row; }
+    .nixiebox { width: 46%; }
+    .nixie { font-size: 17px; }
+    .knob { width: 80px; height: 80px; }
+    .tag { width: 104px; font-size: 10.5px; left: 50px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dial .needle { transition: none; }
+    .dim { transition: opacity 0.5s; }
+  }
+</style>
+</head>
+<body>
+
+<div class="unit" id="unit">
+  <div class="cabinet">
+    <div class="facepanel">
+      <div class="dial" id="dial"><div class="needle" id="needle"></div></div>
+      <div class="meters">
+        <div class="vu">
+          <div class="arc"></div><div class="redzone"></div>
+          <div class="vneedle" id="vneedle"></div>
+          <div class="vlabel">VU</div>
+        </div>
+        <div class="nixiebox">
+          <div class="nixie" id="nixie">88.0</div>
+          <div class="bandlabel">JORR&nbsp;&nbsp;FM 76&ndash;95</div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="power" id="power">
+          <div class="pw-plate">
+            <div class="pw-switch"></div>
+            <div class="pw-label">POWER</div>
+          </div>
+          <div class="tag">受信には、いちど<br />触れてください。</div>
+        </div>
+        <div class="knob" id="knob">
+          <div class="dot"></div>
+          <div class="klabel">TUNING</div>
+        </div>
+      </div>
+    </div>
+    <div class="nameplate">REPORADAR&nbsp;RADIO&nbsp;&middot;&nbsp;MODEL&nbsp;JORR-1974&nbsp;&middot;&nbsp;MOCK&nbsp;04</div>
+  </div>
+</div>
+
+<div class="dim" id="dim"></div>
+<div class="whisper" id="whisper">もう、画面を見なくてもいい。</div>
+
+<script>
+'use strict';
+/* ============================================================
+   受信機の中身。
+   声: speechSynthesis / 空電・時報・チャイム: WebAudio。どちらもブラウザ標準。
+   原稿は data.json から組む固定文(本実装ではAIが毎晩書く)。
+   画面には決して原稿を出さない。
+   ============================================================ */
+const BAND = { lo: 76, hi: 95 };
+const CAPTURE = 0.5; // 同調幅(MHz)
+const STATIONS = [
+  { id: 'r1', freq: 79.5, name: 'レポレーダー第一', short: '第一放送' },
+  { id: 'wx', freq: 86.0, name: '気象通報', short: '気象通報' },
+  { id: 'nb', freq: 92.4, name: '深夜便', short: '深夜便' },
+];
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const unit = document.getElementById('unit');
+const dialEl = document.getElementById('dial');
+const needle = document.getElementById('needle');
+const nixie = document.getElementById('nixie');
+const vneedle = document.getElementById('vneedle');
+const knob = document.getElementById('knob');
+const dim = document.getElementById('dim');
+const whisper = document.getElementById('whisper');
+
+const state = { power: false, freq: 88.0, locked: null };
+let programs = null;      // data.json 到着後に組む
+let progToken = 0;        // 番組の世代。回すと進行中の番組が黙る
+let progTimer = 0;
+let lockTimer = 0;
+let currentUtter = null;  // GC対策(Chromeはonendごと回収することがある)
+let whispered = false;
+let idleTimer = 0;
+
+/* ---- ダイヤル盤の目盛を刷る ---- */
+(function printDial() {
+  const pos = (f) => ((f - BAND.lo) / (BAND.hi - BAND.lo)) * 100;
+  let html = '';
+  for (let f = BAND.lo; f <= BAND.hi; f += 0.5) {
+    const major = Number.isInteger(f);
+    html += `<div class="tick" style="left:${pos(f)}%;height:${major ? 14 : 8}px"></div>`;
+    if (major && f % 2 === 0) html += `<div class="freqnum" style="left:${pos(f)}%">${f}</div>`;
+  }
+  for (const st of STATIONS) {
+    html += `<div class="stmark" style="left:${pos(st.freq)}%"></div>`;
+    html += `<div class="stname" style="left:${pos(st.freq)}%">${st.short}</div>`;
+  }
+  dialEl.insertAdjacentHTML('afterbegin', html);
+})();
+
+/* ============================================================
+   音響部(WebAudio): 空電・搬送波のうなり・時報・チャイム
+   ============================================================ */
+let ctx = null, master = null, noiseGain = null, whistleOsc = null, whistleGain = null;
+
+function powerOnAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+
+  const len = ctx.sampleRate * 2;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 0.6;
+  noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
+  src.connect(bp).connect(noiseGain).connect(master); src.start();
+
+  whistleOsc = ctx.createOscillator(); whistleOsc.type = 'sine';
+  whistleGain = ctx.createGain(); whistleGain.gain.value = 0;
+  whistleOsc.connect(whistleGain).connect(master); whistleOsc.start();
+
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+function beep(freq, at, dur, gain) {
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(gain, at + 0.015);
+  g.gain.setValueAtTime(gain, at + dur - 0.03);
+  g.gain.linearRampToValueAtTime(0, at + dur);
+  o.connect(g).connect(master); o.start(at); o.stop(at + dur + 0.05);
+}
+function playJihou() {          // 時報: プ・プ・プ・ポーン
+  const t = ctx.currentTime + 0.2;
+  beep(440, t, 0.1, 0.06); beep(440, t + 1, 0.1, 0.06); beep(440, t + 2, 0.1, 0.06);
+  beep(880, t + 3, 0.9, 0.07);
+}
+function playNightChime() {     // 深夜便: 柔らかい二音
+  const t = ctx.currentTime + 0.1;
+  beep(659.25, t, 1.6, 0.035); beep(523.25, t + 0.7, 2.0, 0.03);
+}
+function playAlert() {          // 破壊的変更のお知らせ
+  const t = ctx.currentTime;
+  beep(988, t, 0.12, 0.05); beep(988, t + 0.25, 0.12, 0.05);
+}
+
+/* ---- 同調にあわせて空電を整える ---- */
+function shapeNoise() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const dist = Math.min(...STATIONS.map((s) => Math.abs(s.freq - state.freq)));
+  const noise = !state.power ? 0 : state.locked ? 0.016 : Math.min(0.13, 0.05 + dist * 0.03);
+  noiseGain.gain.setTargetAtTime(noise, t, 0.25);
+  const inBeat = !state.locked && dist < 2.6;
+  whistleOsc.frequency.setTargetAtTime(120 + dist * 850, t, 0.08);
+  whistleGain.gain.setTargetAtTime(state.power && inBeat ? 0.018 * (1 - dist / 2.6) : 0, t, 0.15);
+}
+
+/* ============================================================
+   声(speechSynthesis)
+   ============================================================ */
+let voiceDay = null, voiceNight = null;
+function pickVoices() {
+  const ja = speechSynthesis.getVoices().filter((v) => v.lang && v.lang.startsWith('ja'));
+  if (!ja.length) return;
+  voiceDay = ja.find((v) => /Nanami|Google/i.test(v.name)) || ja[0];
+  voiceNight = ja.find((v) => v !== voiceDay) || voiceDay;
+}
+pickVoices();
+speechSynthesis.addEventListener('voiceschanged', pickVoices);
+
+function stopProgram() {
+  progToken++;
+  clearTimeout(progTimer);
+  speechSynthesis.cancel();
+}
+function speakSeq(segs, token, opts, i = 0) {
+  if (token !== progToken) return;
+  if (i >= segs.length) {
+    if (opts.loop) progTimer = setTimeout(() => speakSeq(segs, token, opts, 0), opts.loopGap || 5000);
+    return;
+  }
+  const seg = segs[i];
+  progTimer = setTimeout(() => {
+    if (token !== progToken) return;
+    if (seg.alert && ctx) playAlert();
+    const u = new SpeechSynthesisUtterance(seg.t);
+    u.lang = 'ja-JP';
+    const v = opts.night ? voiceNight : voiceDay;
+    if (v) u.voice = v;         // 音声一覧が空の環境では既定音声に任せる
+    u.rate = seg.rate ?? opts.rate ?? 1;
+    u.pitch = seg.pitch ?? opts.pitch ?? 1;
+    u.onend = () => speakSeq(segs, token, opts, i + 1);
+    u.onerror = () => speakSeq(segs, token, opts, i + 1);
+    currentUtter = u;
+    speechSynthesis.speak(u);
+  }, seg.pre ?? 400);
+}
+
+/* ============================================================
+   番組表(原稿はここにしか存在しない。画面には出さない)
+   ============================================================ */
+const OUTAGE = [
+  { t: 'こちらは、レポレーダー放送です。', pre: 600 },
+  { t: 'データリンクの障害により、この放送は、休止しています。', pre: 500 },
+];
+function buildPrograms(data) {
+  const now = data ? new Date(data.generatedAt).getTime() : 0;
+  const days = (p) => Math.floor((now - new Date(p).getTime()) / 86400000);
+  const strip = (s) => s.replace(/^・/, '').replace(/。?$/, '');
+
+  let r1segs = OUTAGE, wxsegs = OUTAGE;
+  if (data) {
+    const others = data.favorites.filter(
+      (f) => !['vercel/next.js', 'prisma/prisma'].includes(f.fullName) && days(f.publishedAt) <= 7,
+    ).length;
+    const nx = data.favorites.find((f) => f.fullName === 'vercel/next.js');
+    const pr = data.favorites.find((f) => f.fullName === 'prisma/prisma');
+    r1segs = [
+      { t: 'ジェイ、オー、アール、アール。こちらは、レポレーダー放送です。', pre: 700 },
+      { t: '七月三十一日、金曜日。二十一時の定時放送をお送りします。', pre: 300 },
+      { t: 'まず、主要なリリースです。', pre: 900 },
+      { t: `ヴァーセルの、ネクストジェイエス、${nx.tagName}。` + nx.summary.map(strip).join('。') + '。', pre: 400 },
+      { t: `プリズマ、${pr.tagName}。` + pr.summary.map(strip).join('。') + '。', pre: 700 },
+      { t: `このほか、今週に入って、${others}件のリリースが届いています。`, pre: 700 },
+      { t: '続いて、破壊的変更のお知らせです。', pre: 1100, alert: true },
+      { t: 'リアクト、バージョン二十が、レガシー、コンテキスト、エーピーアイを、完全に削除しました。ご利用のかたは、移行をご確認ください。', pre: 700 },
+      { t: `観測情報です。本日のエーピーアイ残量、${data.rateLimit.remaining}。上限、${data.rateLimit.limit}。晴れ。掃引に支障はありません。`, pre: 1100 },
+      { t: '以上、定時放送でした。ジェイ、オー、アール、アール。次の放送まで、どうぞ、よい観測を。', pre: 900 },
+    ];
+    const READING = { 'expressjs/express': 'エクスプレス', 'auth0/node-jsonwebtoken': 'ノード、ジェイソンウェブトークン' };
+    const silence = data.favorites
+      .filter((f) => days(f.publishedAt) > 180)
+      .sort((a, b) => new Date(a.publishedAt) - new Date(b.publishedAt))
+      .map((f) => {
+        const m = Math.floor(days(f.publishedAt) / 30.44);
+        const span = m >= 12 ? `${Math.floor(m / 12)}年${m % 12}か月` : `${m}か月`;
+        return { t: `${READING[f.fullName] || f.fullName}。最終信号、${f.tagName}。${span}、無信号。`, pre: 600 };
+      });
+    wxsegs = [
+      { t: 'レポレーダー、気象通報です。三十一日、二十一時の観測。', pre: 800 },
+      { t: `コア資源。残量、${data.rateLimit.remaining}。晴れ。`, pre: 600 },
+      { t: 'サーチ資源。残量、上限どおり。晴れ。', pre: 600 },
+      { t: '続いて、沈黙の観測です。', pre: 900 },
+      ...silence,
+      { t: '以上、レポレーダー気象通報でした。', pre: 900 },
+    ];
+  }
+  const nbsegs = [
+    { t: 'ジェイ、オー、アール、アール、第二放送。深夜便の時間です。', pre: 800 },
+    { t: '今夜の一枚は、二〇一九年、二月。リアクト、十六点八。', pre: 1600 },
+    { t: 'フックが、はじめて世に出た夜です。', pre: 1200 },
+    { t: 'クラスを書かなくていい、と聞いたとき、多くのひとが、半信半疑でした。状態は、関数のなかに、住めるのか。', pre: 1400 },
+    { t: 'リリースノートは、こう書き出しています。フックは、後方互換である。', pre: 1600 },
+    { t: '壊さずに、すべてを変える。そういう仕事が、たまに、あります。', pre: 1400 },
+    { t: 'それでは、また明晩。周波数は、そのままで。', pre: 2000 },
+  ];
+  return {
+    r1: (token) => { if (ctx) playJihou(); progTimer = setTimeout(() => speakSeq(r1segs, token, { rate: 1.02, pitch: 1.0 }), 4300); },
+    wx: (token) => speakSeq(wxsegs, token, { rate: 0.96, pitch: 0.9, loop: true, loopGap: 6000 }),
+    nb: (token) => { if (ctx) playNightChime(); progTimer = setTimeout(() => speakSeq(nbsegs, token, { rate: 0.82, pitch: 0.72, night: true }), 2800); },
+  };
+}
+fetch('./data.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((d) => { programs = buildPrograms(d); })
+  .catch(() => { programs = buildPrograms(null); });
+
+/* ============================================================
+   同調
+   ============================================================ */
+function setFreq(f) {
+  state.freq = Math.min(BAND.hi, Math.max(BAND.lo, f));
+  const frac = (state.freq - BAND.lo) / (BAND.hi - BAND.lo);
+  needle.style.left = `calc(${(frac * 100).toFixed(2)}% - 1px)`;
+  knob.style.transform = `rotate(${(frac * 270 - 135).toFixed(1)}deg)`;
+
+  const near = STATIONS.find((s) => Math.abs(s.freq - state.freq) < CAPTURE) || null;
+  if (near !== state.locked) {
+    stopProgram();
+    clearTimeout(lockTimer);
+    state.locked = near;
+    if (near && state.power) {
+      lockTimer = setTimeout(() => {       // 針が落ち着いてから放送が立ち上がる
+        if (state.locked === near && programs) startProgram(near);
+      }, 700);
+      if (!whispered) { whispered = true; setTimeout(showWhisper, 7000); }
+    }
+  }
+  nixie.textContent = state.power ? (state.locked ? state.locked.name : state.freq.toFixed(1)) : '';
+  shapeNoise();
+}
+function startProgram(st) {
+  const token = ++progToken;
+  programs[st.id](token);
+}
+
+/* ---- 電源(自動再生の許しを乞う一回の接触) ---- */
+document.getElementById('power').addEventListener('click', () => {
+  state.power = !state.power;
+  unit.classList.toggle('on', state.power);
+  if (state.power) {
+    if (!ctx) powerOnAudio();
+    else if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    /* iOSの音声エンジンはユーザー操作内の同期speak()でしか解錠されない
+       (ctx.resume()と同格の儀式)。以後のsetTimeout経由の発話が通るようになる */
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
+    pickVoices();
+    setFreq(state.freq);
+  } else {
+    stopProgram();
+    state.locked = null;
+    nixie.textContent = '';
+    shapeNoise();
+    dim.style.opacity = 0;
+  }
+});
+
+/* ---- ダイヤル: 触れたところへ ---- */
+function dialPoint(ev) {
+  const r = dialEl.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  setFreq(BAND.lo + frac * (BAND.hi - BAND.lo));
+}
+dialEl.addEventListener('pointerdown', (ev) => {
+  if (!state.power) return;
+  dialEl.setPointerCapture(ev.pointerId);
+  dialPoint(ev);
+});
+dialEl.addEventListener('pointermove', (ev) => {
+  if (state.power && dialEl.hasPointerCapture(ev.pointerId)) dialPoint(ev);
+});
+
+/* ---- ツマミ: 掴んで回す(中心に対する角度で制御。270度=バンド全域) ---- */
+function knobAngle(ev) {
+  const r = knob.getBoundingClientRect();
+  return (Math.atan2(ev.clientY - (r.top + r.height / 2), ev.clientX - (r.left + r.width / 2)) * 180) / Math.PI;
+}
+let knobDrag = null;
+knob.addEventListener('pointerdown', (ev) => {
+  if (!state.power) return;
+  try { knob.setPointerCapture(ev.pointerId); } catch {}
+  knobDrag = { a: knobAngle(ev) };
+});
+knob.addEventListener('pointermove', (ev) => {
+  if (!knobDrag) return;
+  const a = knobAngle(ev);
+  let d = a - knobDrag.a;
+  if (d > 180) d -= 360;        // -180/+180の折り返しをまたいだ回転
+  else if (d < -180) d += 360;
+  knobDrag.a = a;
+  setFreq(state.freq + (d / 270) * (BAND.hi - BAND.lo));
+});
+knob.addEventListener('pointerup', () => { knobDrag = null; });
+knob.addEventListener('pointercancel', () => { knobDrag = null; });
+addEventListener('keydown', (ev) => {
+  if (!state.power) return;
+  if (ev.key === 'ArrowRight') setFreq(state.freq + 0.1);
+  if (ev.key === 'ArrowLeft') setFreq(state.freq - 0.1);
+});
+
+/* ============================================================
+   眺めなくていい、という主張
+   聴取が安定すると部屋が暗くなる。触れれば戻る。
+   ============================================================ */
+function showWhisper() {
+  whisper.classList.add('show');
+  setTimeout(() => whisper.classList.remove('show'), 6000);
+}
+function resetIdle() {
+  dim.style.opacity = 0;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (state.power && state.locked) dim.style.opacity = 0.85;
+  }, 14000);
+}
+addEventListener('pointerdown', resetIdle);
+addEventListener('pointermove', resetIdle);
+resetIdle();
+
+/* ---- VUメーター: 声のあいだだけ、針が生きる ---- */
+let vuLevel = 0, vuTarget = 0, vuNextJitter = 0;
+(function vuLoop(t) {
+  if (t > vuNextJitter) {
+    vuNextJitter = t + 90 + Math.random() * 90;
+    if (state.power && speechSynthesis.speaking && !speechSynthesis.paused) {
+      vuTarget = 0.45 + Math.random() * 0.42;
+    } else if (state.power) {
+      vuTarget = state.locked ? 0.06 : 0.13 + Math.random() * 0.05;
+    } else {
+      vuTarget = 0;
+    }
+  }
+  vuLevel += (vuTarget - vuLevel) * (REDUCED ? 0.08 : 0.18);
+  vneedle.style.transform = `rotate(${(-48 + vuLevel * 88).toFixed(1)}deg)`;
+  requestAnimationFrame(vuLoop);
+})(0);
+
+/* ---- 退出時は放送を止める(speechSynthesisはページを跨いで喋り続けることがある) ---- */
+addEventListener('pagehide', () => {
+  speechSynthesis.cancel();
+  if (ctx) ctx.close().catch(() => {});
+});
+
+setFreq(state.freq);
+</script>
+</body>
+</html>

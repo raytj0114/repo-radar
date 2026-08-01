@@ -17,6 +17,24 @@ describe('buildReleaseSummaryPrompt', () => {
     expect(prompt).toContain('3行');
   });
 
+  it('構造化出力の4項目を指示する', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('JSON');
+    expect(prompt).toContain('headline');
+    expect(prompt).toContain('lede');
+    expect(prompt).toContain('lines');
+    expect(prompt).toContain('hasBreaking');
+  });
+
+  it('破壊的変更の判定基準を明示する', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('hasBreaking を true にする変更の例');
+    expect(prompt).toContain('削除や改名');
+    expect(prompt).toContain('既定値の変更');
+    expect(prompt).toContain('マイグレーション');
+    expect(prompt).toContain('最低バージョン');
+  });
+
   it('リリース名がnullならタグ名で代替する', () => {
     const prompt = buildReleaseSummaryPrompt({ ...base, name: null });
     expect(prompt).toContain('リリース: v16.2.0 (v16.2.0)');

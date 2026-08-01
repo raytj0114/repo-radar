@@ -62,15 +62,21 @@ model FavoriteRepo {
 
 // AI要約キャッシュ。リリースは不変なのでTTLを持たない。
 // cacheKey = "owner/repo@tagName"
+// 構造化列（headline / lede / hasBreaking）は promptVersion 2 以降の行にのみ入る。
+// 既存行および構造化パースに失敗して縮退保存した行では null のまま（表示側でフォールバック）。
 model ReleaseSummary {
-  id        String   @id @default(cuid())
-  cacheKey  String   @unique
-  owner     String
-  repo      String
-  tagName   String
-  summary   String   @db.Text
-  model     String // 生成に使ったモデル名（プロンプト改善時の棚卸し用）
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  cacheKey      String   @unique
+  owner         String
+  repo          String
+  tagName       String
+  summary       String   @db.Text // 要点3行（「・」付きテキスト）
+  headline      String? // 紙面の見出し
+  lede          String?  @db.Text // 見出しを補う前文
+  hasBreaking   Boolean? // null = 未判定
+  promptVersion Int      @default(1) // プロンプト世代。1 = 構造化以前 / 2 = 構造化JSON
+  model         String // 生成に使ったモデル名（プロンプト改善時の棚卸し用）
+  createdAt     DateTime @default(now())
 
   @@index([owner, repo])
 }

@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Sparkles } from 'lucide-react';
-import { getReleaseSummary } from '@/app/actions/summaries';
+import { AlertTriangle, Sparkles } from 'lucide-react';
+import { getReleaseSummary, type ReleaseSummaryResult } from '@/app/actions/summaries';
+
+/** 生成済みの要約。構造化以前のキャッシュ行では headline / lede が null になる */
+type LoadedSummary = Extract<ReleaseSummaryResult, { ok: true }>;
 
 export function ReleaseSummary({
   owner,
@@ -13,7 +16,7 @@ export function ReleaseSummary({
   name: string;
   tagName: string;
 }) {
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<LoadedSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -22,7 +25,7 @@ export function ReleaseSummary({
       setError(null);
       const result = await getReleaseSummary({ owner, name, tagName });
       if (result.ok) {
-        setSummary(result.summary);
+        setSummary(result);
       } else {
         setError(result.message);
       }
@@ -36,7 +39,21 @@ export function ReleaseSummary({
           <Sparkles size={12} />
           AI要約
         </p>
-        <p className="whitespace-pre-line text-sm text-gray-800">{summary}</p>
+        {(summary.hasBreaking || summary.headline) && (
+          <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {summary.hasBreaking && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                <AlertTriangle size={12} />
+                破壊的変更
+              </span>
+            )}
+            {summary.headline && (
+              <p className="text-sm font-bold text-gray-900">{summary.headline}</p>
+            )}
+          </div>
+        )}
+        {summary.lede && <p className="mb-1 text-sm text-gray-700">{summary.lede}</p>}
+        <p className="whitespace-pre-line text-sm text-gray-800">{summary.summary}</p>
       </div>
     );
   }

@@ -254,6 +254,25 @@ describe('fetchReleases', () => {
       'https://api.github.com/repos/vercel/next.js/releases?per_page=1'
     );
   });
+
+  it('既定ではrevalidate付きのfetchキャッシュを使う', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(releasesFixture));
+    await client.fetchReleases('vercel', 'next.js', { maxPages: 1 });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.next).toEqual({ revalidate: 300 });
+    expect(init.cache).toBeUndefined();
+  });
+
+  // digest cronは窓終端の取りこぼし防止のためキャッシュを踏まない（Issue #36 指摘3）
+  it('fresh指定ではno-storeになり、Data Cacheを共有しない', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(releasesFixture));
+    await client.fetchReleases('vercel', 'next.js', { maxPages: 1, fresh: true });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.cache).toBe('no-store');
+    expect(init.next).toBeUndefined();
+  });
 });
 
 describe('fetchReleaseByTag', () => {

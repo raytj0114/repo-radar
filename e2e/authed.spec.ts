@@ -94,8 +94,8 @@ test.describe('デイリーダイジェスト', () => {
     await expect(
       page.getByRole('heading', { name: 'デイリーダイジェスト', level: 1 })
     ).toBeVisible();
-    // 冒頭の総括はルールベース生成（シードの2エントリと対応）
-    await expect(page.getByText('2リポジトリ・2リリース（うち破壊的変更1件）')).toBeVisible();
+    // 冒頭の総括はルールベース生成（シードの3エントリと対応）
+    await expect(page.getByText('3リポジトリ・3リリース（うち破壊的変更1件）')).toBeVisible();
     // AIの見出しと破壊的変更バッジ（exact指定で総括内の部分一致と区別する）
     await expect(page.getByText(E2E_DIGEST_ENTRIES.entries[0].headline ?? '')).toBeVisible();
     await expect(page.getByText('破壊的変更', { exact: true })).toBeVisible();
@@ -104,8 +104,9 @@ test.describe('デイリーダイジェスト', () => {
       'href',
       '/repos/vercel/next.js'
     );
-    // 要約が無いリリース（本文なし・生成失敗）もリンクのみで載る
+    // 本文なし（noteless）と要約の生成失敗はラベルを分ける（Issue #36 指摘2）
     await expect(page.getByText('リリースノートなし')).toBeVisible();
+    await expect(page.getByText('要約を生成できませんでした')).toBeVisible();
 
     assertNoConsoleErrors();
   });

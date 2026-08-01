@@ -21,7 +21,12 @@ function request(authorization?: string): Request {
 
 const RUN_RESULT = {
   date: '2026-07-25',
-  digests: { generated: 1, cached: 0, noActivity: 0, failed: 0 },
+  windows: [
+    {
+      date: '2026-07-25',
+      digests: { created: 1, repaired: 0, unchanged: 0, kept: 0, noActivity: 0, failed: 0 },
+    },
+  ],
 };
 
 beforeEach(() => {

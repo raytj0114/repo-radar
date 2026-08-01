@@ -21,6 +21,10 @@ Nextの `fetch` オプションで宣言する:
 | リポジトリメタ `/repos/{o}/{r}`        | 3600       |
 | トレンド検索 `/search/repositories`    | 1800       |
 
+例外: digest cronのリリース取得は `fetchReleases(..., { fresh: true })` で `no-store` にする。
+収集窓の判定では「最大revalidate秒前のスナップショット」が恒久的な取りこぼしになるため
+（画面系の経路では `fresh` を使わない。指定はサーバー側の定数のみで行う）。
+
 ## レート制限
 
 - レスポンスヘッダ `x-ratelimit-remaining` を毎回読む

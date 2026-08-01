@@ -1,21 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/cron/digest/route';
 
-const { favoritesFindManyMock, generateDailyDigestMock } = vi.hoisted(() => ({
-  favoritesFindManyMock: vi.fn(),
-  generateDailyDigestMock: vi.fn(),
+const { runDailyDigestMock } = vi.hoisted(() => ({
+  runDailyDigestMock: vi.fn(),
 }));
 
 vi.mock('@/lib/env', () => ({
   env: { CRON_SECRET: 'test-cron-secret' },
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: { favoriteRepo: { findMany: favoritesFindManyMock } },
-}));
-
 vi.mock('@/lib/digest', () => ({
-  generateDailyDigest: generateDailyDigestMock,
+  runDailyDigest: runDailyDigestMock,
 }));
 
 function request(authorization?: string): Request {
@@ -24,43 +19,34 @@ function request(authorization?: string): Request {
   });
 }
 
+const RUN_RESULT = {
+  date: '2026-07-25',
+  digests: { generated: 1, cached: 0, noActivity: 0, failed: 0 },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-  favoritesFindManyMock.mockResolvedValue([{ userId: 'user_1' }, { userId: 'user_2' }]);
-  generateDailyDigestMock.mockResolvedValue('generated');
+  runDailyDigestMock.mockResolvedValue(RUN_RESULT);
 });
 
 describe('GET /api/cron/digest', () => {
-  it('Authorizationヘッダが無ければ401で、何も生成しない', async () => {
+  it('Authorizationヘッダが無ければ401で、何も実行しない', async () => {
     const res = await GET(request());
     expect(res.status).toBe(401);
-    expect(generateDailyDigestMock).not.toHaveBeenCalled();
+    expect(runDailyDigestMock).not.toHaveBeenCalled();
   });
 
   it('シークレットが違えば401', async () => {
     const res = await GET(request('Bearer wrong-secret'));
     expect(res.status).toBe(401);
-    expect(generateDailyDigestMock).not.toHaveBeenCalled();
+    expect(runDailyDigestMock).not.toHaveBeenCalled();
   });
 
-  it('正しいシークレットならお気に入り保有ユーザーごとに生成する', async () => {
+  it('正しいシークレットなら朝刊の組み立てを実行し、結果をそのまま返す', async () => {
     const res = await GET(request('Bearer test-cron-secret'));
     expect(res.status).toBe(200);
-    expect(generateDailyDigestMock).toHaveBeenCalledTimes(2);
-    const body = await res.json();
-    expect(body.users).toBe(2);
-    expect(body.counts.generated).toBe(2);
-  });
-
-  it('一部ユーザーの失敗は他ユーザーの生成を止めない', async () => {
-    generateDailyDigestMock
-      .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce('generated');
-    const res = await GET(request('Bearer test-cron-secret'));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.counts.failed).toBe(1);
-    expect(body.counts.generated).toBe(1);
+    expect(runDailyDigestMock).toHaveBeenCalledTimes(1);
+    expect(runDailyDigestMock.mock.calls[0][0]).toBeInstanceOf(Date);
+    expect(await res.json()).toEqual(RUN_RESULT);
   });
 });

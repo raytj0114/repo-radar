@@ -89,6 +89,24 @@ describe('generateText', () => {
     expect((error as Error).message).toBe('しばらく時間をおいて再試行してください');
   });
 
+  it('空応答はリトライ対象になり、全滅すればGeminiAPIErrorを投げる', async () => {
+    const { generateText, GeminiAPIError } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('')));
+    const error = await generateText('prompt').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GeminiAPIError);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('空応答のあとに本文が返れば回復する', async () => {
+    const { generateText } = await importClient();
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(successBody('   ')))
+      .mockResolvedValueOnce(fakeResponse(successBody('要約')));
+    const result = await generateText('prompt');
+    expect(result).toEqual({ text: '要約', model: 'gemini-2.5-flash' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('APIキー不正(400)は同一モデルでリトライせず次のモデルを試す', async () => {
     const { generateText } = await importClient();
     fetchMock
@@ -154,6 +172,18 @@ describe('generateStructured', () => {
     });
     // 2モデル × 2試行。構造化しても上限は変わらない
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('空白だけの縮退テキストは保存に値しないので採用しない', async () => {
+    const { generateStructured, GeminiAPIError } = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(successBody('壊れた出力')));
+
+    const error = await generateStructured('prompt', {
+      responseSchema,
+      validate: () => ({ ok: false as const, fallbackText: '   ' }),
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(GeminiAPIError);
   });
 
   it('縮退できる出力も無ければGeminiAPIErrorを投げる', async () => {

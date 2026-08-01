@@ -106,8 +106,10 @@ async function generate<T>(
           }
           // 出力の形式が要求と違う。残りの試行枠で作り直し、全滅したら縮退保存へ回す
           console.error(`[gemini] ${model} attempt=${attempt}: response validation failed`);
-          if (validated.fallbackText !== null) {
-            degraded = { text: validated.fallbackText, model };
+          // 空の縮退テキストは保存に値しない（TTL無しのキャッシュに空の要約を残さない）
+          const fallbackText = validated.fallbackText?.trim() ?? '';
+          if (fallbackText !== '') {
+            degraded = { text: fallbackText, model };
           }
         } else {
           // 空応答・想定外の形式はリトライ対象

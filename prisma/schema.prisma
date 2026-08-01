@@ -82,13 +82,15 @@ model ReleaseSummary {
 }
 
 // デイリーダイジェスト。cacheKey = "digest:YYYY-MM-DD:userId"
+// 朝刊化（Issue #30）以降は共有要約を組み立てた entries のみを書き、LLMは呼ばない。
 model DailyDigest {
   id        String   @id @default(cuid())
   cacheKey  String   @unique
   userId    String
   date      DateTime @db.Date
-  content   String   @db.Text
-  model     String
+  content   String?  @db.Text // 旧形式（LLM生成テキスト）。entries導入後は旧データ表示専用
+  model     String? // 旧形式で使ったモデル名。組み立て式（entries）では null
+  entries   Json? // 朝刊エントリ（src/lib/digest.ts の digestEntriesSchema 準拠の配列）。null = 旧形式
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 

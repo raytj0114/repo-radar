@@ -3,8 +3,10 @@ import Link from 'next/link';
 import { Sparkles } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { DigestEntryList } from '@/components/features/digest/digest-entry-list';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Notice } from '@/components/ui/notice';
+import { digestEntriesSchema, type DigestEntry } from '@/lib/digest';
 import { formatDateJa } from '@/lib/format';
 
 export const metadata: Metadata = {
@@ -12,6 +14,13 @@ export const metadata: Metadata = {
 };
 
 const DIGEST_HISTORY_LIMIT = 30;
+
+/** entries（朝刊形式）を検証して取り出す。旧形式・不正な形は null（contentのテキスト表示へ） */
+function parseEntries(entries: unknown): DigestEntry[] | null {
+  if (entries === null || entries === undefined) return null;
+  const parsed = digestEntriesSchema.safeParse(entries);
+  return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+}
 
 export default async function DigestPage() {
   const session = await auth();
@@ -30,7 +39,7 @@ export default async function DigestPage() {
     <main>
       <h1 className="mb-1 text-2xl font-bold tracking-tight">デイリーダイジェスト</h1>
       <p className="mb-6 text-sm text-gray-500">
-        お気に入りリポジトリの1日の動きをAIがまとめます（毎日自動生成）
+        お気に入りリポジトリの1日の動きを、AI要約付きの朝刊にまとめます（毎日自動生成）
       </p>
 
       {digests.length === 0 ? (
@@ -51,15 +60,22 @@ export default async function DigestPage() {
           {!hasToday && (
             <Notice message="本日分のダイジェストはまだ生成されていません（毎日 6:00 JST に自動生成されます）。" />
           )}
-          {digests.map((digest) => (
-            <article key={digest.id} className="rounded-lg border border-gray-200 p-4">
-              <h2 className="mb-2 flex items-center gap-1.5 font-bold">
-                <Sparkles size={14} className="text-indigo-500" />
-                {formatDateJa(digest.date.toISOString())}
-              </h2>
-              <p className="whitespace-pre-line text-sm text-gray-800">{digest.content}</p>
-            </article>
-          ))}
+          {digests.map((digest) => {
+            const entries = parseEntries(digest.entries);
+            return (
+              <article key={digest.id} className="rounded-lg border border-gray-200 p-4">
+                <h2 className="mb-2 flex items-center gap-1.5 font-bold">
+                  <Sparkles size={14} className="text-indigo-500" />
+                  {formatDateJa(digest.date.toISOString())}
+                </h2>
+                {entries ? (
+                  <DigestEntryList entries={entries} />
+                ) : (
+                  <p className="whitespace-pre-line text-sm text-gray-800">{digest.content}</p>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
     </main>

@@ -67,14 +67,49 @@ export const E2E_FAVORITES = [
 ] as const;
 
 /**
- * シードするダイジェスト。日付を過去に固定することで、
- * 「本日分は未生成」のNoticeが必ず出る決定的な状態を作る。
+ * シードするダイジェスト（朝刊化以前の旧形式 = contentのみ）。旧データの表示互換を検証する。
+ * 日付を過去に固定することで、「本日分は未生成」のNoticeが必ず出る決定的な状態を作る。
  */
 export const E2E_DIGEST = {
   date: '2026-07-01',
   content:
     'vercel/next.js に v16.2.0 がリリースされ、Turbopackのビルド性能改善とApp Routerのキャッシュ制御の見直しが入りました。octocat/observability-dashboard-toolkit は依存関係の更新のみです。',
 } as const;
+
+/**
+ * シードするダイジェスト（朝刊形式 = entries）。`src/lib/digest.ts` の digestEntriesSchema と
+ * 同じ形にする（ずれると画面は旧形式へフォールバックし、カードのアサーションが落ちて気づける）。
+ * 2件目は「実在しうる長さ」のリポジトリ名 + 要約なしで、375pxのtruncateと
+ * 「リリースノートなし」表示を同時に踏む。総括は「2リポジトリ・2リリース（うち破壊的変更1件）」になる。
+ */
+export const E2E_DIGEST_ENTRIES = {
+  date: '2026-07-02',
+  entries: [
+    {
+      owner: 'vercel',
+      repo: 'next.js',
+      fullName: 'vercel/next.js',
+      tagName: 'v16.1.0',
+      releaseName: 'v16.1.0',
+      publishedAt: '2026-07-02T03:00:00Z',
+      headline: 'Turbopackがビルド既定に',
+      summary:
+        '・Turbopackが既定のビルドになった\n・App Routerのキャッシュ制御を刷新\n・画像最適化のメモリ使用量を削減',
+      hasBreaking: true,
+    },
+    {
+      owner: 'octocat',
+      repo: 'observability-dashboard-toolkit',
+      fullName: 'octocat/observability-dashboard-toolkit',
+      tagName: 'v2.4.1',
+      releaseName: null,
+      publishedAt: '2026-07-01T22:30:00Z',
+      headline: null,
+      summary: null,
+      hasBreaking: null,
+    },
+  ],
+};
 
 /** リポジトリ詳細の404経路を踏むためのowner。モックサーバーはこのownerに対して404を返す */
 export const MISSING_OWNER = 'missing';

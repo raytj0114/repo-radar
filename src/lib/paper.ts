@@ -16,6 +16,15 @@ export const BRIEF_WINDOW_DAYS = 60;
 export const SILENCE_THRESHOLD_DAYS = 180;
 export const SILENCE_BOLD_DAYS = 365;
 
+/**
+ * 相場欄が見るトレンドの観測窓（日）。星数スナップショットの採取（`src/lib/star-snapshot.ts`）と
+ * **必ず同じ値を使う**ため、ここを唯一の出所にする（Issue #39）。
+ * ずれると採取側の母集団が表示銘柄を包含しなくなり、前日比が「履歴の無い銘柄」として
+ * 静かに欠ける（型にもテストにも出ず、画面上も未採取と区別が付かない）。
+ * `/trending` の窓はこれとは独立: 言語フィルタを持つ別画面で、順位の深さも用途も違う
+ */
+export const MARKET_WINDOW_DAYS = 30;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 

@@ -160,27 +160,41 @@ function nextPageUrl(linkHeader: string | null): string | null {
   return null;
 }
 
-/** リポジトリ詳細。404（消滅・改名・private化）は想定内としてnullを返す */
-export async function fetchRepository(owner: string, repo: string): Promise<Repository | null> {
+/**
+ * Data Cacheをバイパスして常に最新を取る指定。指定はサーバー側の定数だけで行い、
+ * 画面系の経路では使わない。「数分〜数十分の鮮度差が恒久的な誤りとして焼き付く」cron専用の逃げ道:
+ * - digest cronのリリース取得: 詳細画面とURLを共有するため、直前に温まったキャッシュ
+ *   （最大revalidate秒前のスナップショット）だと窓終端のリリースを取りこぼす（Issue #36 指摘3）
+ * - 星数スナップショットの採取: 訂正不能な点データなので、古い観測を21:00 UTCの値として
+ *   記録しない（Issue #39）
+ */
+export type FreshOption = {
+  fresh?: boolean;
+};
+
+/**
+ * リポジトリ詳細。404（消滅・private化）は想定内としてnullを返す。
+ * 改名は404にならない: GitHubが301を返し、fetchが既定でリダイレクトを追うため
+ * 新しい `full_name` で200が返る（同一オリジンなのでAuthorizationヘッダも維持される）
+ */
+export async function fetchRepository(
+  owner: string,
+  repo: string,
+  options: FreshOption = {}
+): Promise<Repository | null> {
   const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-  const res = await githubFetch(path, REVALIDATE_SECONDS.repository);
+  const res = await githubFetch(path, options.fresh ? 'no-store' : REVALIDATE_SECONDS.repository);
   if (res.status === 404) return null;
   if (!res.ok) await raiseForStatus(res, `GET ${path}`);
   return parseWith(repositorySchema, await res.json(), `GET ${path}`);
 }
 
 /** 取得量の指定。呼び出し側（サーバー）の定数のみで決める。クライアント入力は渡さない */
-export type ReleaseFetchOptions = {
+export type ReleaseFetchOptions = FreshOption & {
   /** 1ページあたりの取得件数。GitHubの上限100に丸める */
   perPage?: number;
   /** 辿る最大ページ数。用途ごとに必ず上限を持つ（規約: 無限に辿らない） */
   maxPages?: number;
-  /**
-   * Data Cacheをバイパスして常に最新を取る。詳細画面とURLを共有するdigest cronが、
-   * 直前に温まったキャッシュ（最大revalidate秒前のスナップショット）で窓終端のリリースを
-   * 取りこぼさないための指定（Issue #36 指摘3）。画面系の経路では使わない
-   */
-  fresh?: boolean;
 };
 
 /**
@@ -254,12 +268,14 @@ export async function fetchRateLimit(): Promise<RateLimitSnapshot> {
  * トレンド検索: 指定期間以降に作成されたリポジトリをスター数順に返す。
  * 言語未指定なら全言語横断。
  */
-export async function searchTrendingRepositories(options: {
-  language?: string;
-  createdAfter: Date;
-  perPage?: number;
-}): Promise<SearchRepositoriesResult> {
-  const { language, createdAfter, perPage = 30 } = options;
+export async function searchTrendingRepositories(
+  options: FreshOption & {
+    language?: string;
+    createdAfter: Date;
+    perPage?: number;
+  }
+): Promise<SearchRepositoriesResult> {
+  const { language, createdAfter, perPage = 30, fresh } = options;
   const qualifiers = [`created:>${createdAfter.toISOString().slice(0, 10)}`];
   if (language) {
     qualifiers.push(`language:${language}`);
@@ -271,7 +287,7 @@ export async function searchTrendingRepositories(options: {
     per_page: String(perPage),
   });
   const path = `/search/repositories?${params.toString()}`;
-  const res = await githubFetch(path, REVALIDATE_SECONDS.search);
+  const res = await githubFetch(path, fresh ? 'no-store' : REVALIDATE_SECONDS.search);
   if (!res.ok) await raiseForStatus(res, 'GET /search/repositories');
   return parseWith(searchRepositoriesSchema, await res.json(), 'GET /search/repositories');
 }

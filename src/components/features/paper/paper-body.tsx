@@ -13,6 +13,7 @@ import {
   composeMarket,
   listSilent,
   pickFrontPage,
+  MARKET_WINDOW_DAYS,
   type LatestSignal,
   type MarketRow,
   type PaperDate,
@@ -31,8 +32,7 @@ import styles from './paper.module.css';
  */
 const RELEASES_PER_REPO = 5;
 
-/** 相場欄の観測窓と行数（/trending と同じ30日窓。行数は紙面の組みに合わせる） */
-const MARKET_WINDOW_DAYS = 30;
+/** 相場欄の行数（紙面の組みに合わせる）。観測窓は採取と共有する `MARKET_WINDOW_DAYS` */
 const MARKET_ROW_LIMIT = 6;
 
 /** entries（朝刊形式）を検証して取り出す。旧形式・不正な形は空（一面は休載になる） */

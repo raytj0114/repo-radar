@@ -11,6 +11,7 @@ import { fetchReleases } from '@/lib/github/client';
 import type { Release } from '@/lib/github/schemas';
 import { prisma } from '@/lib/prisma';
 import { ensureReleaseSummary } from '@/lib/release-summary';
+import { collectStarSnapshots, type StarSnapshotResult } from '@/lib/star-snapshot';
 
 // デイリーダイジェスト＝「朝刊」の組み立て（Issue #30 / #36 / ai-cost-guard準拠）。
 // AI呼び出しは共有要約（ReleaseSummary）が未生成のリリース数にのみ比例し、
@@ -185,13 +186,17 @@ export type DailyDigestRunResult = {
   repos: { total: number; fetchFailed: number };
   releases: number;
   summaries: { generated: number; cached: number; noteless: number; failed: number };
+  /** 星数スナップショットの採取結果（Issue #39）。null = フェーズごと失敗（朝刊は続行済み） */
+  stars: StarSnapshotResult | null;
 };
 
 /**
  * 日次cronの本体。
- * 1. 全ユーザー横断でお気に入りリポジトリをユニーク化し、48時間（前日窓+当日窓）のリリースを取得
- * 2. 未生成のリリースだけ共有要約を生成（AI呼び出しはここだけ＝新規リリース数にのみ比例）
- * 3. 窓ごと・ユーザーごとに朝刊を組み立て、改善するときだけ書き込む（LLM呼び出しゼロ・冪等）
+ * 1. 全ユーザー横断でお気に入りリポジトリをユニーク化する
+ * 2. 当日窓の星数スナップショットを採取する（Issue #39）
+ * 3. 48時間（前日窓+当日窓）のリリースを取得する
+ * 4. 未生成のリリースだけ共有要約を生成（AI呼び出しはここだけ＝新規リリース数にのみ比例）
+ * 5. 窓ごと・ユーザーごとに朝刊を組み立て、改善するときだけ書き込む（LLM呼び出しゼロ・冪等）
  */
 export async function runDailyDigest(now: Date): Promise<DailyDigestRunResult> {
   const windows = digestWindowsFor(now);
@@ -210,6 +215,21 @@ export async function runDailyDigest(now: Date): Promise<DailyDigestRunResult> {
     if (!uniqueRepos.has(key)) uniqueRepos.set(key, favorite);
   }
   const repoList = [...uniqueRepos.entries()];
+
+  // 星数の採取（Issue #39）。ここだけは意図的に後続と直列にする:
+  // スナップショットは訂正不能な点データで、取り逃した日は永久に欠測になる。
+  // タイムアウトしたときに、回復不能な採取を先に済ませ、翌日のバックフィルで回復できる
+  // 朝刊の生成を後に回すため（「独立な取得は直列にawaitしない」原則の意図的な例外）。
+  // 採取自体の失敗は朝刊を止めない
+  let stars: StarSnapshotResult | null = null;
+  try {
+    stars = await collectStarSnapshots(
+      windows[windows.length - 1],
+      repoList.map(([, repo]) => repo)
+    );
+  } catch (error) {
+    console.error('[digest] star snapshot phase failed:', error);
+  }
 
   // 48時間ぶんのリリース取得。失敗したリポジトリはこの回の朝刊から漏れるが、全体は止めない
   // （配達済みの朝刊は compareDigestEntries の regressed 判定が守る）
@@ -283,6 +303,7 @@ export async function runDailyDigest(now: Date): Promise<DailyDigestRunResult> {
     repos: { total: uniqueRepos.size, fetchFailed },
     releases: [...releasesByRepo.values()].reduce((sum, list) => sum + list.length, 0),
     summaries: summaryCounts,
+    stars,
   };
 }
 

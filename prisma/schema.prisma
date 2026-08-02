@@ -81,6 +81,23 @@ model ReleaseSummary {
   @@index([owner, repo])
 }
 
+// 星数の日次スナップショット（Issue #39）。相場欄の前日比（表示は別Issue）の材料。
+// 観測名目時刻は毎日21:00 UTC（朝刊の収集窓の終端）固定で、date はその日のUTC日付。
+// 書き込みは**先勝ち**（既存行を上書きしない）。窓は24時間あるため、日中の再実行で
+// 「21:00の観測」として何時間も後の星数を焼き付けないようにするため。
+// **バックフィル不能**: 過去日の星数はGitHub APIから取得できないため、収集を開始した日より
+// 前のデータは永久に存在しない。取りこぼした日も欠測のまま埋まらない（表示側で縮退させる）。
+// fullName は小文字に正規化して保存する（cacheKeyと同じ正規化。ケース違いの二重行を作らない）。
+model RepoStarSnapshot {
+  id        String   @id @default(cuid())
+  fullName  String // 正規化済み（例: "vercel/next.js"）
+  stars     Int
+  date      DateTime @db.Date // 観測日 = 収集窓の終端のUTC日付
+  createdAt DateTime @default(now())
+
+  @@unique([fullName, date])
+}
+
 // デイリーダイジェスト。cacheKey = "digest:YYYY-MM-DD:userId"
 // 朝刊化（Issue #30）以降は共有要約を組み立てた entries のみを書き、LLMは呼ばない。
 model DailyDigest {

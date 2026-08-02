@@ -12,13 +12,16 @@ import {
   type DigestEntry,
 } from '@/lib/digest';
 import { latestDigestDay } from '@/lib/digest-window';
-import type { Release } from '@/lib/github/schemas';
+import type { Release, Repository } from '@/lib/github/schemas';
 
 const {
   digestFindManyMock,
   digestUpsertMock,
   favoritesFindManyMock,
   fetchReleasesMock,
+  fetchRepositoryMock,
+  searchTrendingRepositoriesMock,
+  snapshotUpsertMock,
   summaryFindUniqueMock,
   summaryUpsertMock,
   generateStructuredMock,
@@ -27,6 +30,9 @@ const {
   digestUpsertMock: vi.fn(),
   favoritesFindManyMock: vi.fn(),
   fetchReleasesMock: vi.fn(),
+  fetchRepositoryMock: vi.fn(),
+  searchTrendingRepositoriesMock: vi.fn(),
+  snapshotUpsertMock: vi.fn(),
   summaryFindUniqueMock: vi.fn(),
   summaryUpsertMock: vi.fn(),
   generateStructuredMock: vi.fn(),
@@ -37,12 +43,15 @@ vi.mock('@/lib/prisma', () => ({
     dailyDigest: { findMany: digestFindManyMock, upsert: digestUpsertMock },
     favoriteRepo: { findMany: favoritesFindManyMock },
     releaseSummary: { findUnique: summaryFindUniqueMock, upsert: summaryUpsertMock },
+    repoStarSnapshot: { upsert: snapshotUpsertMock },
   },
 }));
 
 vi.mock('@/lib/github/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/github/client')>()),
   fetchReleases: fetchReleasesMock,
+  fetchRepository: fetchRepositoryMock,
+  searchTrendingRepositories: searchTrendingRepositoriesMock,
 }));
 
 vi.mock('@/lib/gemini/client', async (importOriginal) => ({
@@ -92,6 +101,22 @@ const FAVORITE_USER1 = {
   fullName: 'vercel/next.js',
 };
 const FAVORITE_USER2 = { ...FAVORITE_USER1, userId: 'user_2' };
+
+/** 星数の採取（Issue #39）が読むリポジトリメタ。使うのは full_name / stargazers_count だけ */
+const REPOSITORY: Repository = {
+  id: 1,
+  name: 'next.js',
+  full_name: 'vercel/next.js',
+  owner: { login: 'vercel', avatar_url: 'https://avatars.example/vercel.png' },
+  html_url: 'https://github.com/vercel/next.js',
+  description: null,
+  language: 'TypeScript',
+  stargazers_count: 1234,
+  forks_count: 1,
+  open_issues_count: 1,
+  created_at: '2020-01-01T00:00:00Z',
+  pushed_at: '2026-07-25T00:00:00Z',
+};
 
 const STRUCTURED = {
   headline: 'Turbopack既定化',
@@ -324,6 +349,13 @@ describe('runDailyDigest', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     favoritesFindManyMock.mockResolvedValue([FAVORITE_USER1, FAVORITE_USER2]);
     fetchReleasesMock.mockResolvedValue([release({})]);
+    fetchRepositoryMock.mockResolvedValue(REPOSITORY);
+    searchTrendingRepositoriesMock.mockResolvedValue({
+      total_count: 0,
+      incomplete_results: false,
+      items: [],
+    });
+    snapshotUpsertMock.mockResolvedValue({});
     digestFindManyMock.mockResolvedValue([]);
     digestUpsertMock.mockResolvedValue({});
     summaryFindUniqueMock.mockResolvedValue(null);
@@ -596,5 +628,73 @@ describe('runDailyDigest', () => {
     const tomorrow = await runDailyDigest(new Date('2026-07-26T21:00:30Z'));
     expect(tomorrow.windows[1].digests.created).toBe(1);
     expect(digestUpsertMock.mock.calls[0][0].where.cacheKey).toBe('digest:2026-07-26:user_1');
+  });
+
+  // ---- 星数スナップショットの採取（Issue #39） ----
+
+  it('採取対象はユニーク化したお気に入りで、当日窓の日付で保存される', async () => {
+    const result = await runDailyDigest(NOW);
+
+    // 同じリポジトリを2ユーザーがお気に入りにしていても取得・記録は1回
+    expect(fetchRepositoryMock).toHaveBeenCalledTimes(1);
+    expect(fetchRepositoryMock).toHaveBeenCalledWith('vercel', 'next.js', { fresh: true });
+    expect(snapshotUpsertMock).toHaveBeenCalledTimes(1);
+    expect(snapshotUpsertMock.mock.calls[0][0]).toEqual({
+      where: {
+        fullName_date: {
+          fullName: 'vercel/next.js',
+          date: new Date('2026-07-25T00:00:00.000Z'),
+        },
+      },
+      create: {
+        fullName: 'vercel/next.js',
+        stars: REPOSITORY.stargazers_count,
+        date: new Date('2026-07-25T00:00:00.000Z'),
+      },
+      update: { stars: REPOSITORY.stargazers_count },
+    });
+    // 採取は当日窓のみ（前日窓はバックフィルしない＝過去の星数は取得できないため）
+    expect(result.stars).toEqual({
+      date: '2026-07-25',
+      observed: 1,
+      written: 1,
+      fetchFailed: 0,
+      writeFailed: 0,
+      trendingFailed: false,
+    });
+  });
+
+  it('採取フェーズはリリース取得・要約生成より前に走る（タイムアウト時に回復不能な方を優先する）', async () => {
+    await runDailyDigest(NOW);
+
+    expect(snapshotUpsertMock).toHaveBeenCalled();
+    expect(generateStructuredMock).toHaveBeenCalled();
+    const snapshotWrite = snapshotUpsertMock.mock.invocationCallOrder[0];
+    expect(snapshotWrite).toBeLessThan(fetchReleasesMock.mock.invocationCallOrder[0]);
+    expect(snapshotWrite).toBeLessThan(generateStructuredMock.mock.invocationCallOrder[0]);
+  });
+
+  it('採取フェーズが落ちても朝刊の生成は止まらない（失敗隔離）', async () => {
+    snapshotUpsertMock.mockRejectedValue(new Error('db down'));
+    fetchRepositoryMock.mockRejectedValue(new Error('github down'));
+    searchTrendingRepositoriesMock.mockRejectedValue(new Error('github down'));
+
+    const result = await runDailyDigest(NOW);
+
+    expect(digestUpsertMock).toHaveBeenCalledTimes(2);
+    expect(result.windows[1].digests.created).toBe(2);
+    expect(result.stars).toMatchObject({ observed: 0, written: 0, fetchFailed: 1 });
+  });
+
+  it('採取フェーズ自体が例外で終わっても朝刊は配達され、starsはnullで報告される', async () => {
+    // collectStarSnapshots 内部のガードをすり抜ける想定外の失敗（最後の砦としての try/catch）
+    searchTrendingRepositoriesMock.mockImplementation(() => {
+      throw new Error('unexpected');
+    });
+
+    const result = await runDailyDigest(NOW);
+
+    expect(result.stars).toBeNull();
+    expect(digestUpsertMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,14 +1,9 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { auth, signOut } from '@/lib/auth';
+import { signOutAction } from '@/app/actions/auth';
+import { auth } from '@/lib/auth';
 import { MobileNav } from './mobile-nav';
 import { navItems } from './nav-items';
-
-/** デスクトップのフォームとモバイルメニューで同じServer Actionを共有する */
-async function signOutAction(): Promise<void> {
-  'use server';
-  await signOut({ redirectTo: '/login' });
-}
 
 export async function Header() {
   const session = await auth();

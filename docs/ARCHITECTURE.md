@@ -24,30 +24,35 @@
 ```
 src/
 ├── app/
-│   ├── (main)/              # 認証後のメイン画面群
-│   │   ├── page.tsx         # ダッシュボード（お気に入りの新着リリース）
-│   │   ├── trending/        # トレンド（言語別スターランキング）
-│   │   ├── repos/[owner]/[name]/  # リポジトリ詳細（リリース一覧+AI要約）
-│   │   ├── favorites/       # お気に入り管理
-│   │   └── digest/          # デイリーダイジェスト
-│   ├── (auth)/login/
+│   ├── (main)/              # 認証必須（layoutはauth()ガードのみ。DOMを足さない）
+│   │   ├── page.tsx         # 一面 = 紙面「日刊 RepoRadar」（Issue #31。全画面・ヘッダーなし）
+│   │   └── (chrome)/        # グローバルヘッダー + max-w-3xl コンテナの従来UI画面群
+│   │       ├── trending/    # トレンド（言語別スターランキング）
+│   │       ├── repos/[owner]/[name]/  # リポジトリ詳細（リリース一覧+AI要約）
+│   │       └── digest/      # デイリーダイジェスト（履歴＝縮刷版）
+│   ├── (auth)/login/        # ヘッダーレス（全画面センタリング）
 │   ├── actions/             # Server Actions（全て認証必須）
+│   │   ├── auth.ts          # signOutAction（ヘッダーと紙面奥付で共有）
 │   │   ├── favorites.ts
 │   │   └── summaries.ts     # AI要約の取得/生成トリガー
 │   └── api/
 │       ├── auth/[...nextauth]/
 │       └── cron/digest/     # Vercel Cron専用（CRON_SECRETで保護）
 ├── components/
-│   ├── features/            # repos / releases / trending / digest / favorites
+│   ├── features/            # paper（紙面） / releases / digest / favorites
 │   ├── ui/                  # 汎用UI
-│   └── layout/
+│   └── layout/              # グローバルヘッダー（(chrome)配下でのみ表示）
 ├── lib/
 │   ├── env.ts               # 環境変数の唯一の入口（Zod検証）
 │   ├── prisma.ts
+│   ├── digest.ts            # 朝刊の組み立て（cron本体・entriesスキーマ）
+│   ├── digest-window.ts     # 収集窓の純関数（prisma/env非依存。E2Eからも直接import）
+│   ├── paper.ts             # 紙面の編集ロジック（純関数のみ）
+│   ├── format.ts            # 表示フォーマッタ（漢数字・和文日付を含む）
 │   ├── github/              # GitHub APIクライアント層
-│   │   ├── client.ts        # fetch + ETag + rate-limitヘッダ処理
+│   │   ├── client.ts        # fetch + rate-limitヘッダ処理 + /rate_limit観測
 │   │   ├── schemas.ts       # レスポンスのZodスキーマ
-│   │   └── cache-key.ts     # cacheKey生成（実装済み・テストの雛形）
+│   │   └── cache-key.ts     # cacheKey生成
 │   └── gemini/
 │       ├── client.ts
 │       └── prompts.ts       # リリース要約のプロンプト
@@ -114,6 +119,22 @@ Next.js サーバー
 - `promptVersion` はプロンプト世代（1 = 構造化以前 / 2 = 構造化JSON）。TTL無しのキャッシュのまま
   プロンプトを進化させるための世代管理で、既存行の再生成は管理者操作としてのみ行う
 
+紙面「日刊 RepoRadar」（Issue #31、`/` = `src/app/(main)/page.tsx`）:
+
+- **AI呼び出しはゼロ**。一面・二番手は当日 `DailyDigest.entries`、短信の1行目は
+  `ReleaseSummary` キャッシュの**読み取りのみ**。紙面表示からAI生成は絶対に発火させない
+- 日付規則は「**常に今日の号**」: 紙面日付 = 窓終端（21:00 UTC = 朝6:00 JST）のJST日付。
+  朝6時に翌号へ切り替わり、号数（創刊日 `FOUNDING_DATE_JST` からの経過日数+1）は毎日進む。
+  当日の朝刊が無い日は一面のみ休載表示（他欄は生きたまま）。/digest の「本日分」判定も
+  同じ規則（`latestDigestDay`）を共有する
+- entriesの `lede`（前文）は #31 で追加したためoptional。欠落した旧行は前文なしで組み、
+  翌朝cronのバックフィルが improved 判定で自動補完する
+- 一面の「最大」決定則（`pickFrontPage`）: 破壊的変更 → 見出しあり → 要約あり → 新しい順。
+  二番手は一面と別リポジトリから選ぶ
+- 縮退方針: **紙面は落ちない**。欄単位で休載・観測休止の枠に倒す（エラー境界へ全面では
+  倒さない）。レート枠はプール別（core=短信・沈黙 / search=相場、天気はゲート外）なので
+  縮退も欄別に起きる
+
 ## GitHub API戦略
 
 - 認証: サーバー側PAT（読み取り専用・publicのみのfine-grained token）
@@ -124,10 +145,14 @@ Next.js サーバー
   - リリース一覧: 300s / リポジトリメタ: 3600s / トレンド検索: 1800s
   - 例外: digest cronのリリース取得だけは窓の正確性を優先し `no-store`（`fetchReleases` の `fresh`。Issue #36）
 - 取得量は画面の表示件数に合わせる（`fetchReleases` の `perPage` / `maxPages`）
-  - ダッシュボード: 1リポジトリ5件表示なので `per_page=5` の1ページのみ
+  - 紙面（/）: 最新信号だけ使うが `per_page=5` の1ページ（詳細画面とのfetchキャッシュ共有を保つ）
   - リポジトリ詳細: 履歴を全件見せるため既定（`per_page=100` × 最大3ページ）
-- ダッシュボードは見出し（シェル）を即時送出し、タイムラインを `<Suspense>` でストリーミングする。
-  お気に入り全件のリリース取得がページ全体をブロックしないようにするため
+- 紙面はシェル（題字・日付行・奥付。同期計算のみ）を即時送出し、本文を `<Suspense>` で
+  ストリーミングする。お気に入り全件のリリース取得がページ全体をブロックしないようにするため
+- レート残量の観測用に `GET /rate_limit` を使う（`fetchRateLimit`、revalidate 60秒。
+  このエンドポイントはレート枠を消費しない）。**フロア遮断ゲートの外**に置き、応答を残量観測に
+  流さない: 残量を報じる関数が残量枯渇で死なない・遮断済みプロセスの観測を健全な値で
+  上書きして遮断を解除しない、の2点のため
 - **依存関係の無い取得は直列に await しない**（待ち時間が加算されるため）。`src/lib/github/concurrent.ts` の
   `settle` で包んで `Promise.all` にまとめ、使う直前に `unwrapSettled` で取り出す
   - リポジトリ詳細: リポジトリメタ / リリース一覧 / お気に入り判定（Prisma）を同時に投げる。
@@ -143,7 +168,7 @@ Next.js サーバー
 - 公開エンドポイント一覧（ここに無いものは全て認証必須）:
   - `GET/POST /api/auth/*` （Auth.js。CSRF検証はAuth.js内蔵）
   - `/login` のsignIn Server Action（GitHub OAuthへのリダイレクトのみ。実処理はAuth.js側）
-  - ヘッダーのsignOut Server Action（自セッションの破棄のみで副作用なし）
+  - `signOutAction`（`src/app/actions/auth.ts`。ヘッダーと紙面奥付で共有。自セッションの破棄のみで副作用なし）
   - `GET /api/cron/digest` （`Authorization: Bearer ${CRON_SECRET}` を検証）
 - 上流APIのエラー本文をクライアントへ透過しない（汎用メッセージに丸め、詳細はサーバーログ）
 - LLMプロンプトへの入力はサーバーで取得したデータのみ
@@ -159,6 +184,8 @@ Next.js サーバー
 - `DailyDigest` は朝刊化（Issue #30）以降 `entries`（Json、`src/lib/digest.ts` の `digestEntriesSchema` 準拠）
   のみを書く。`content` / `model` は朝刊化以前の行（LLM生成テキスト）の表示用に nullable で残し、
   表示側は entries が無い・検証に通らない行だけ `content` のテキスト表示へフォールバックする
+  - entries内の `lede` は #31 で追加したためoptional（欠落＝#31以前の行。`entryEquals` は
+    欠落とnullを同一視し、バックフィルの improved 判定で自動補完される）
 - スキーマ変更は必ず `prisma migrate dev`（履歴を残す）
 
 ## E2Eの方針
@@ -195,8 +222,16 @@ Playwrightから注入する。**アプリコードに認証バイパスの分�
 
 開発用DBを汚さないよう、E2Eは専用DB（既定 `repo_radar_e2e`、`E2E_DATABASE_URL` で変更可）を使う。
 `e2e/global-setup.ts` が `prisma migrate deploy` を実行し、テストが期待する固定データを投入する。
-シードするお気に入りは10件（`e2e/constants.ts`）で、ダッシュボードのストリーミングを実サイズで踏む。
+シードするお気に入りは11件（`e2e/constants.ts`。10件+沈黙検証用の `silent-*`）で、
+紙面のストリーミングを実サイズで踏む。ダイジェストは旧形式・朝刊形式の履歴に加えて
+**当日窓と翌日窓の2日分**（`E2E_TODAY_DIGEST_ENTRIES`）をシードし、一面の検証を
+21:00 UTC境界跨ぎに関係なく決定的にする（窓計算は `@/lib/digest-window` を直接importして共有）。
 CIは e2e ジョブの `services.postgres` が同じ構成のDBを立てる。
+
+モックサーバーのリリース日付は**起動時からの相対日付**で返す（固定日付だと実時間の経過で
+紙面の短信（60日以内）から静かに消え、半年後に全件が沈黙の記録（180日超）へ雪崩れ込むため）。
+例外として `silent-*` ownerだけは数年前の固定日付を返し、沈黙の記録の「一年超は太字」を
+永続的に検証できるようにする。`GET /rate_limit` は常に4,999/5,000（=晴）を返す。
 
 ### 並列取得の検証
 

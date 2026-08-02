@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import rateLimitFixture from './fixtures/github/rate-limit.json';
 import repositoryFixture from './fixtures/github/repository.json';
 import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
@@ -175,6 +176,61 @@ describe('レート制限', () => {
     await client.fetchRepository('vercel', 'next.js');
     await client.fetchRepository('vercel', 'next.js');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('fetchRateLimit', () => {
+  it('coreプールの残量と上限をスキーマ検証して返す（revalidate 60秒）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(rateLimitFixture));
+    const snapshot = await client.fetchRateLimit();
+    expect(snapshot).toEqual({ limit: 5000, remaining: 4812 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.github.com/rate_limit');
+    expect(init.headers.Authorization).toBe('Bearer test-token');
+    expect(init.next).toEqual({ revalidate: 60 });
+  });
+
+  // 残量を報じる関数が残量枯渇で死んではいけない（残量が尽きたときこそ天気欄は「雨」を報じる）
+  it('coreプールがフロア未満で遮断されていても呼び出せる', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(
+      fakeResponse(repositoryFixture, { headers: { 'x-ratelimit-remaining': '50' } })
+    );
+    await client.fetchRepository('vercel', 'next.js');
+    await expect(client.fetchRepository('vercel', 'next.js')).rejects.toBeInstanceOf(
+      client.GitHubRateLimitError
+    );
+
+    fetchMock.mockResolvedValue(fakeResponse(rateLimitFixture));
+    await expect(client.fetchRateLimit()).resolves.toEqual({ limit: 5000, remaining: 4812 });
+  });
+
+  // 応答ヘッダを残量観測に流すと、遮断済みプロセスの観測値を健全な値で上書きして
+  // 遮断を解除してしまう（E2Eの縮退表示検証が壊れる）。残量の正はボディのみから読む
+  it('応答が遮断済みプールの残量観測を上書きしない', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(
+      fakeResponse(repositoryFixture, { headers: { 'x-ratelimit-remaining': '50' } })
+    );
+    await client.fetchRepository('vercel', 'next.js');
+
+    fetchMock.mockResolvedValue(
+      fakeResponse(rateLimitFixture, {
+        headers: { 'x-ratelimit-remaining': '4812', 'x-ratelimit-resource': 'core' },
+      })
+    );
+    await client.fetchRateLimit();
+
+    await expect(client.fetchRepository('vercel', 'next.js')).rejects.toBeInstanceOf(
+      client.GitHubRateLimitError
+    );
+  });
+
+  it('失敗時は汎用メッセージのGitHubAPIErrorを投げる', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse({ message: 'boom' }, { status: 500 }));
+    await expect(client.fetchRateLimit()).rejects.toBeInstanceOf(client.GitHubAPIError);
   });
 });
 

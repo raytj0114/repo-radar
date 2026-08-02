@@ -7,6 +7,7 @@ import { DigestEntryList } from '@/components/features/digest/digest-entry-list'
 import { EmptyState } from '@/components/ui/empty-state';
 import { Notice } from '@/components/ui/notice';
 import { digestEntriesSchema, type DigestEntry } from '@/lib/digest';
+import { latestDigestDay } from '@/lib/digest-window';
 import { formatDateJa } from '@/lib/format';
 
 export const metadata: Metadata = {
@@ -32,8 +33,10 @@ export default async function DigestPage() {
     take: DIGEST_HISTORY_LIMIT,
   });
 
-  const today = new Date().toISOString().slice(0, 10);
-  const hasToday = digests.some((digest) => digest.date.toISOString().slice(0, 10) === today);
+  // 「本日分」= 今日の朝刊の帰属日（直近21:00 UTCの窓）。素朴なUTC日付比較だと
+  // 9:00 JST以降、届いているのに未生成と誤表示していた（#30持ち越しのJST意味論。Issue #31で裁定）
+  const expectedDay = latestDigestDay(new Date());
+  const hasToday = digests.some((digest) => digest.date.toISOString().slice(0, 10) === expectedDay);
 
   return (
     <main>

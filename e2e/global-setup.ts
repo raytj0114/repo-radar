@@ -6,7 +6,9 @@ import {
   E2E_DIGEST,
   E2E_DIGEST_ENTRIES,
   E2E_FAVORITES,
+  E2E_TODAY_DIGEST_ENTRIES,
   E2E_USER,
+  e2eDigestDay,
 } from './constants';
 
 // E2E専用DBを用意し、決定的なシードデータを流し込む（Issue #16 論点3）。
@@ -67,6 +69,22 @@ async function seed(): Promise<void> {
         entries: E2E_DIGEST_ENTRIES.entries,
       },
     });
+
+    // 当日の朝刊（紙面の一面・二番手を検証する。Issue #31）。
+    // 当日窓に加えて翌日窓もシードし、セットアップとテスト実行の間に
+    // 21:00 UTC境界を跨いでも一面が休載へ落ちない決定的な状態にする
+    for (const dayOffset of [0, 1]) {
+      const day = e2eDigestDay(dayOffset);
+      const date = new Date(`${day}T00:00:00Z`);
+      await prisma.dailyDigest.create({
+        data: {
+          cacheKey: dailyDigestKey(date, E2E_USER.id),
+          userId: E2E_USER.id,
+          date,
+          entries: E2E_TODAY_DIGEST_ENTRIES,
+        },
+      });
+    }
   } finally {
     await prisma.$disconnect();
   }

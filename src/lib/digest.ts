@@ -1,5 +1,11 @@
 import type { FavoriteRepo, ReleaseSummary } from '@prisma/client';
 import { z } from 'zod';
+import {
+  digestDayOf,
+  digestWindowsFor,
+  releasesInWindow,
+  type DigestWindow,
+} from '@/lib/digest-window';
 import { dailyDigestKey, releaseSummaryKey } from '@/lib/github/cache-key';
 import { fetchReleases } from '@/lib/github/client';
 import type { Release } from '@/lib/github/schemas';
@@ -10,62 +16,22 @@ import { ensureReleaseSummary } from '@/lib/release-summary';
 // AI呼び出しは共有要約（ReleaseSummary）が未生成のリリース数にのみ比例し、
 // ユーザーごとのダイジェストは要約を組み立てるだけでLLMを呼ばない。
 // 組み立てはAIコストゼロなので毎回冪等にやり直し、改善するときだけ上書きする（Issue #36）。
+// 収集窓の計算は src/lib/digest-window.ts（純関数）に分離してある（Issue #31）。
 
-/** 収集窓の終端時刻（UTC）。vercel.json のcron（`0 21 * * *`）と対にする */
-const WINDOW_END_HOUR_UTC = 21;
+// 既存のimport元（テスト・cron route）との互換のため、窓関連はここからも公開する
+export {
+  digestDayOf,
+  digestWindowFor,
+  digestWindowsFor,
+  releasesInWindow,
+  type DigestWindow,
+} from '@/lib/digest-window';
 
 /**
  * 窓の正確性を優先し、cron経路はfetchキャッシュを使わない（fresh。Issue #36 指摘3）。
  * 48時間ぶん（当日窓+前日バックフィル）のリリースは先頭1ページ（最新100件）で必ず収まる
  */
 const DIGEST_RELEASE_FETCH = { perPage: 100, maxPages: 1, fresh: true } as const;
-
-/** 半開区間 (start, end]。startちょうどは前日の窓、endちょうどは当日の窓に属する */
-export type DigestWindow = { start: Date; end: Date };
-
-/**
- * 実行時刻から収集窓を決める。end = now以前の直近21:00 UTC、start = その24時間前。
- * cronの発火が数分遅れても同じ窓・同じダイジェスト日付に丸まる。
- * 21:00 UTCより前に手動実行した場合は前日分の窓になる（部分的な当日窓を作らない）。
- */
-export function digestWindowFor(now: Date): DigestWindow {
-  const end = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), WINDOW_END_HOUR_UTC)
-  );
-  if (end.getTime() > now.getTime()) {
-    end.setUTCDate(end.getUTCDate() - 1);
-  }
-  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-  return { start, end };
-}
-
-/**
- * 1回のcronが処理する窓（古い順）。当日窓に加えて前日窓もバックフィルすることで、
- * cron自体の失敗・タイムアウト・要約の一時障害があっても翌日の実行で自動回復する（Issue #36 指摘1）。
- * リリース取得は同じ先頭100件を使い回すため、窓を増やしてもGitHub/AIコストは増えない。
- */
-export function digestWindowsFor(now: Date): DigestWindow[] {
-  const current = digestWindowFor(now);
-  const previous = {
-    start: new Date(current.start.getTime() - 24 * 60 * 60 * 1000),
-    end: current.start,
-  };
-  return [previous, current];
-}
-
-/** ダイジェストの帰属日（YYYY-MM-DD）。窓の終端のUTC日付で、cacheKey・date列に使う */
-export function digestDayOf(window: DigestWindow): string {
-  return window.end.toISOString().slice(0, 10);
-}
-
-/** 窓内（start排他・end包含）に公開されたリリースのみ抽出する（draftのpublished_at=nullは除外） */
-export function releasesInWindow(releases: Release[], window: DigestWindow): Release[] {
-  return releases.filter((release) => {
-    if (!release.published_at) return false;
-    const publishedAt = Date.parse(release.published_at);
-    return window.start.getTime() < publishedAt && publishedAt <= window.end.getTime();
-  });
-}
 
 /**
  * 朝刊の1エントリ。DailyDigest.entries（Json列）にはこの配列を保存する。
@@ -83,6 +49,8 @@ export const digestEntrySchema = z.object({
   /** ISO 8601。窓内リリースのみを載せるため必ず値がある */
   publishedAt: z.string(),
   headline: z.string().nullable(),
+  /** 前文（一面トップの導入文）。#31で追加したためoptional。欠落した旧エントリは前文なしで組む */
+  lede: z.string().nullable().optional(),
   summary: z.string().nullable(),
   hasBreaking: z.boolean().nullable(),
   noteless: z.boolean().optional(),
@@ -98,7 +66,7 @@ function repoKeyOf(owner: string, name: string): string {
 }
 
 type FavoriteRepoRef = Pick<FavoriteRepo, 'owner' | 'name' | 'fullName'>;
-type SummaryRef = Pick<ReleaseSummary, 'summary' | 'headline' | 'hasBreaking'>;
+type SummaryRef = Pick<ReleaseSummary, 'summary' | 'headline' | 'lede' | 'hasBreaking'>;
 
 /**
  * 1ユーザー分の朝刊エントリを組み立てる（純関数・LLM呼び出しなし）。
@@ -132,6 +100,7 @@ export function assembleDigestEntries(
         releaseName: release.name,
         publishedAt: release.published_at,
         headline: summary?.headline ?? null,
+        lede: summary?.lede ?? null,
         summary: summary?.summary ?? null,
         hasBreaking: summary?.hasBreaking ?? null,
         noteless: !release.body || release.body.trim() === '',
@@ -167,6 +136,7 @@ function entryEquals(a: DigestEntry, b: DigestEntry): boolean {
     a.releaseName === b.releaseName &&
     a.publishedAt === b.publishedAt &&
     a.headline === b.headline &&
+    (a.lede ?? null) === (b.lede ?? null) &&
     a.summary === b.summary &&
     a.hasBreaking === b.hasBreaking &&
     (a.noteless ?? null) === (b.noteless ?? null)

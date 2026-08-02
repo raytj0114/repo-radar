@@ -82,7 +82,7 @@ describe('MobileNav', () => {
     expect(panel).toHaveAttribute('id', 'mobile-nav-panel');
     expect(trigger).toHaveAttribute('aria-controls', 'mobile-nav-panel');
 
-    expect(screen.getByRole('link', { name: 'ダッシュボード' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '一面' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'トレンド' })).toHaveAttribute('href', '/trending');
     expect(screen.getByRole('link', { name: 'ダイジェスト' })).toHaveAttribute('href', '/digest');
     expect(screen.getByRole('button', { name: 'ログアウト' })).toHaveAttribute('type', 'submit');
@@ -90,7 +90,7 @@ describe('MobileNav', () => {
 
   it('開いた直後は先頭のリンクにフォーカスする', () => {
     fireEvent.click(renderNav());
-    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'ダッシュボード' }));
+    expect(document.activeElement).toBe(screen.getByRole('link', { name: '一面' }));
   });
 
   it('Escで閉じてトリガーへフォーカスを戻す', () => {
@@ -104,7 +104,7 @@ describe('MobileNav', () => {
 
   it('Tabでフォーカスがパネル内を循環する', () => {
     fireEvent.click(renderNav());
-    const first = screen.getByRole('link', { name: 'ダッシュボード' });
+    const first = screen.getByRole('link', { name: '一面' });
     const last = screen.getByRole('button', { name: 'ログアウト' });
 
     last.focus();

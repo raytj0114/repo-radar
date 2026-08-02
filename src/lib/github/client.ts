@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { env } from '@/lib/env';
 import {
+  rateLimitSchema,
   releaseListSchema,
   releaseSchema,
   repositorySchema,
   searchRepositoriesSchema,
+  type RateLimitSnapshot,
   type Release,
   type Repository,
   type SearchRepositoriesResult,
@@ -39,6 +41,7 @@ const REVALIDATE_SECONDS = {
   releases: 300,
   repository: 3600,
   search: 1800,
+  rateLimit: 60,
 } as const;
 
 export class GitHubAPIError extends Error {
@@ -220,6 +223,31 @@ export async function fetchReleaseByTag(
   if (res.status === 404) return null;
   if (!res.ok) await raiseForStatus(res, `GET ${path}`);
   return parseWith(releaseSchema, await res.json(), `GET ${path}`);
+}
+
+/**
+ * レート残量の観測（紙面の天気欄。Issue #31）。`GET /rate_limit` はレート枠を消費しない。
+ *
+ * `githubFetch` を意図的に通さない:
+ * - フロア遮断ゲートの内側だと「残量を報じる関数が残量枯渇で死ぬ」矛盾になる
+ *   （残量が尽きたときこそ天気欄は「雨」を報じるべき）
+ * - レスポンスヘッダを `trackRateLimit` に流すと、遮断済みインスタンスの残量観測を
+ *   健全な値で上書きして遮断を解除してしまう（縮退表示のE2Eが壊れる）。
+ *   残量の正はレスポンスボディのみから読む
+ */
+export async function fetchRateLimit(): Promise<RateLimitSnapshot> {
+  const url = `${resolveBaseUrl()}/rate_limit`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_API_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': API_VERSION,
+      'User-Agent': 'repo-radar',
+    },
+    next: { revalidate: REVALIDATE_SECONDS.rateLimit },
+  });
+  if (!res.ok) await raiseForStatus(res, 'GET /rate_limit');
+  return parseWith(rateLimitSchema, await res.json(), 'GET /rate_limit').resources.core;
 }
 
 /**

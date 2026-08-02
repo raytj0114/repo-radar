@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  rateLimitSchema,
   releaseListSchema,
   releaseSchema,
   repositorySchema,
   searchRepositoriesSchema,
 } from '@/lib/github/schemas';
+import rateLimitFixture from './fixtures/github/rate-limit.json';
 import repositoryFixture from './fixtures/github/repository.json';
 import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
@@ -29,6 +31,15 @@ describe('repositorySchema', () => {
   it('stargazers_count が文字列だとエラーになる', () => {
     const broken = { ...repositoryFixture, stargazers_count: '128000' };
     expect(repositorySchema.safeParse(broken).success).toBe(false);
+  });
+
+  it('created_at の欠落は受理する（後付けフィールド。デプロイ跨ぎのData Cacheに旧形式が残るため）', () => {
+    const { created_at, ...legacyCached } = repositoryFixture;
+    const result = repositorySchema.safeParse(legacyCached);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.created_at).toBeUndefined();
+    }
   });
 
   it('description / language / pushed_at はnullを許容する', () => {
@@ -92,5 +103,19 @@ describe('searchRepositoriesSchema', () => {
   it('items が配列でないとエラーになる', () => {
     const broken = { ...searchFixture, items: null };
     expect(searchRepositoriesSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+describe('rateLimitSchema', () => {
+  it('実レスポンス相当のfixtureをパースし、coreのみを使う（Issue #31 天気欄）', () => {
+    const result = rateLimitSchema.safeParse(rateLimitFixture);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.resources.core).toEqual({ limit: 5000, remaining: 4812 });
+    }
+  });
+
+  it('resources.core が欠けているとエラーになる', () => {
+    expect(rateLimitSchema.safeParse({ resources: {} }).success).toBe(false);
   });
 });

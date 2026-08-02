@@ -11,6 +11,7 @@ import {
   runDailyDigest,
   type DigestEntry,
 } from '@/lib/digest';
+import { latestDigestDay } from '@/lib/digest-window';
 import type { Release } from '@/lib/github/schemas';
 
 const {
@@ -100,7 +101,12 @@ const STRUCTURED = {
 };
 
 /** 既存要約（プール済み）の行。summaryFindUniqueMock で返す */
-const POOLED_SUMMARY = { summary: '・既存要約', headline: '既存見出し', hasBreaking: false };
+const POOLED_SUMMARY = {
+  summary: '・既存要約',
+  headline: '既存見出し',
+  lede: null,
+  hasBreaking: false,
+};
 
 /** 既定フィクスチャ（vercel/next.js v1.0.0 + POOLED_SUMMARY）から組み立てた期待エントリ */
 function pooledEntry(overrides: Partial<DigestEntry> = {}): DigestEntry {
@@ -141,6 +147,15 @@ describe('digestWindowFor / digestWindowsFor / digestDayOf', () => {
     expect(current.end.toISOString()).toBe('2026-07-25T21:00:00.000Z');
     expect(previous.end.getTime()).toBe(current.start.getTime());
   });
+
+  // /digest の「本日分」判定と紙面の一面が共有する（#30持ち越しのJST意味論。Issue #31で裁定）
+  it('latestDigestDayは朝6:00 JST（21:00 UTC）を境に翌日へ切り替わる', () => {
+    // 7/25の朝刊（=7/25 21:00 UTC締め）は、7/26 20:59 UTC（= 7/27 5:59 JST）まで「本日分」
+    expect(latestDigestDay(new Date('2026-07-25T21:00:00Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T00:00:00Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T20:59:59Z'))).toBe('2026-07-25');
+    expect(latestDigestDay(new Date('2026-07-26T21:00:00Z'))).toBe('2026-07-26');
+  });
 });
 
 describe('releasesInWindow', () => {
@@ -174,6 +189,12 @@ describe('digestEntriesSchema', () => {
   it('notelessの無い#36以前のエントリも受理する（後方互換）', () => {
     const { noteless: _dropped, ...legacyEntry } = entry({});
     expect(digestEntriesSchema.safeParse([legacyEntry]).success).toBe(true);
+  });
+
+  it('ledeの無い#31以前のエントリも、lede付きのエントリも受理する（後方互換）', () => {
+    const { lede: _dropped, ...legacyEntry } = entry({ lede: null });
+    expect(digestEntriesSchema.safeParse([legacyEntry]).success).toBe(true);
+    expect(digestEntriesSchema.safeParse([entry({ lede: '前文の一段落。' })]).success).toBe(true);
   });
 
   it('必須フィールドが欠けた要素・配列以外は拒否する', () => {
@@ -212,13 +233,21 @@ describe('assembleDigestEntries', () => {
       ],
     ]);
     const summariesByKey = new Map([
-      ['vercel/next.js@v1.1.0', { summary: '・要点', headline: '見出し', hasBreaking: true }],
+      [
+        'vercel/next.js@v1.1.0',
+        { summary: '・要点', headline: '見出し', lede: '前文の一段落。', hasBreaking: true },
+      ],
     ]);
 
     const entries = assembleDigestEntries([FAVORITE_USER1], releasesByRepo, summariesByKey);
 
     expect(entries.map((e) => e.tagName)).toEqual(['v1.1.0', 'v1.0.0']);
-    expect(entries[0]).toMatchObject({ headline: '見出し', summary: '・要点', hasBreaking: true });
+    expect(entries[0]).toMatchObject({
+      headline: '見出し',
+      lede: '前文の一段落。',
+      summary: '・要点',
+      hasBreaking: true,
+    });
     // 要約が無いリリース（生成失敗）もリンクのみのエントリとして残る。本文ありなので noteless=false
     expect(entries[1]).toMatchObject({
       headline: null,
@@ -269,6 +298,15 @@ describe('compareDigestEntries', () => {
     expect(compareDigestEntries([entry({})], [entry({}), entry({ tagName: 'v1.1.0' })])).toBe(
       'improved'
     );
+  });
+
+  it('旧entriesにledeが加わる変化は improved（#31追加分はバックフィルで自動補完される）', () => {
+    const { lede: _dropped, ...before } = entry({ lede: null });
+    expect(compareDigestEntries([before as DigestEntry], [entry({ lede: '前文の一段落。' })])).toBe(
+      'improved'
+    );
+    // ledeの欠落とnullは同一視する（jsonbのキー欠落で無限にimprovedし続けない）
+    expect(compareDigestEntries([before as DigestEntry], [entry({ lede: null })])).toBe('equal');
   });
 
   it('リリースの消失・要約の後退（非null→null）は regressed', () => {

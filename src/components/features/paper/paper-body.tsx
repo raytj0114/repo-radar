@@ -2,19 +2,18 @@ import { digestEntriesSchema, type DigestEntry } from '@/lib/digest';
 import { dailyDigestKey, releaseSummaryKey } from '@/lib/github/cache-key';
 import {
   fetchRateLimit,
-  fetchReleases,
   GitHubRateLimitError,
   searchTrendingRepositories,
 } from '@/lib/github/client';
 import { settle } from '@/lib/github/concurrent';
 import type { RateLimitSnapshot } from '@/lib/github/schemas';
+import { loadLatestSignals } from '@/lib/latest-signals';
 import {
   composeBriefs,
   composeMarket,
   listSilent,
   pickFrontPage,
   MARKET_WINDOW_DAYS,
-  type LatestSignal,
   type MarketRow,
   type PaperDate,
 } from '@/lib/paper';
@@ -25,12 +24,6 @@ import { MarketTable } from './market-table';
 import { SilenceTable } from './silence-table';
 import { WeatherBox } from './weather-box';
 import styles from './paper.module.css';
-
-/**
- * 1リポジトリあたりのリリース取得数。短信・沈黙は最新1件しか使わないが、
- * 旧ダッシュボードと同じ取得量にして詳細画面とのfetchキャッシュ共有を保つ
- */
-const RELEASES_PER_REPO = 5;
 
 /** 相場欄の行数（紙面の組みに合わせる）。観測窓は採取と共有する `MARKET_WINDOW_DAYS` */
 const MARKET_ROW_LIMIT = 6;
@@ -72,42 +65,9 @@ export async function PaperBody({ userId, paper }: { userId: string; paper: Pape
   const entries = digestRow ? parseEntries(digestRow.entries) : [];
   const { lead, second, featuredRepoKeys } = pickFrontPage(entries);
 
-  // お気に入り全銘柄の最新信号（旧タイムラインの取得を吸収。1リポジトリ1リクエスト）
-  const settledReleases = await Promise.allSettled(
-    favorites.map((favorite) =>
-      fetchReleases(favorite.owner, favorite.name, { perPage: RELEASES_PER_REPO, maxPages: 1 })
-    )
-  );
-
-  let rateLimited = false;
-  let failedCount = 0;
-  const signals: LatestSignal[] = [];
-  settledReleases.forEach((result, index) => {
-    const favorite = favorites[index];
-    if (result.status === 'rejected') {
-      if (result.reason instanceof GitHubRateLimitError) {
-        rateLimited = true;
-      } else {
-        failedCount += 1;
-        console.error(`[paper] release fetch failed repo=${favorite.fullName}:`, result.reason);
-      }
-      return;
-    }
-    // null はリポジトリ消滅・改名（404）。紙面からは黙って除く（旧ダッシュボードと同じ）
-    const releases = (result.value ?? []).filter((release) => release.published_at !== null);
-    if (releases.length === 0) return;
-    const latest = releases.reduce((a, b) =>
-      Date.parse(a.published_at ?? '') >= Date.parse(b.published_at ?? '') ? a : b
-    );
-    signals.push({
-      owner: favorite.owner,
-      name: favorite.name,
-      fullName: favorite.fullName,
-      tagName: latest.tag_name,
-      publishedAt: latest.published_at ?? '',
-      summaryFirstLine: null,
-    });
-  });
+  // お気に入り全銘柄の最新信号（旧タイムラインの取得を吸収。1リポジトリ1リクエスト）。
+  // 深夜放送（/radio）の気象通報と同じ取得口を使い、fetchキャッシュを共有する
+  const { signals, rateLimited, failedCount } = await loadLatestSignals(favorites);
 
   // 短信の1行目に使う共有要約（キャッシュの読み取りのみ。ここからAI生成は絶対に発火させない）
   const summaryKeys = signals.map((signal) =>

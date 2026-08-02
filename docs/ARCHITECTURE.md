@@ -26,6 +26,7 @@ src/
 ├── app/
 │   ├── (main)/              # 認証必須（layoutはauth()ガードのみ。DOMを足さない）
 │   │   ├── page.tsx         # 一面 = 紙面「日刊 RepoRadar」（Issue #31。全画面・ヘッダーなし）
+│   │   ├── radio/           # 深夜放送 JORR（Issue #32。全画面・ヘッダーなし）
 │   │   └── (chrome)/        # グローバルヘッダー + max-w-3xl コンテナの従来UI画面群
 │   │       ├── trending/    # トレンド（言語別スターランキング）
 │   │       ├── repos/[owner]/[name]/  # リポジトリ詳細（リリース一覧+AI要約）
@@ -39,7 +40,7 @@ src/
 │       ├── auth/[...nextauth]/
 │       └── cron/digest/     # Vercel Cron専用（CRON_SECRETで保護）
 ├── components/
-│   ├── features/            # paper（紙面） / releases / digest / favorites
+│   ├── features/            # paper（紙面） / radio（受信機） / releases / digest / favorites
 │   ├── ui/                  # 汎用UI
 │   └── layout/              # グローバルヘッダー（(chrome)配下でのみ表示）
 ├── lib/
@@ -49,6 +50,8 @@ src/
 │   ├── digest-window.ts     # 収集窓の純関数（prisma/env非依存。E2Eからも直接import）
 │   ├── star-snapshot.ts     # 星数の日次スナップショット採取（cron相乗り。RepoStarSnapshotの唯一の書き込み口）
 │   ├── paper.ts             # 紙面の編集ロジック（純関数のみ）
+│   ├── radio.ts             # 放送原稿の編集ロジック（純関数のみ。受信機UIからもimportする）
+│   ├── latest-signals.ts    # お気に入りの最新リリース取得（紙面と深夜放送の共通の取得口）
 │   ├── format.ts            # 表示フォーマッタ（漢数字・和文日付を含む）
 │   ├── github/              # GitHub APIクライアント層
 │   │   ├── client.ts        # fetch + rate-limitヘッダ処理 + /rate_limit観測
@@ -163,6 +166,35 @@ Next.js サーバー
 - 縮退方針: **紙面は落ちない**。欄単位で休載・観測休止の枠に倒す（エラー境界へ全面では
   倒さない）。レート枠はプール別（core=短信・沈黙 / search=相場、天気はゲート外）なので
   縮退も欄別に起きる
+
+深夜放送「JORR」（Issue #32、`/radio` = `src/app/(main)/radio/page.tsx`）:
+
+- **AI呼び出しはゼロ**。原稿の素材は当日 `DailyDigest.entries`（朝刊）と、紙面が既に使っている
+  観測値（お気に入りの最新リリース・API残量）の**読み取りのみ**。組み立ては `src/lib/radio.ts` の
+  純関数で、ルールベースで日本語に読み下す
+- **原稿は画面に出さない**。サーバーで組んだ `segments` はclient componentへpropsで渡すが、
+  決してレンダーしない（放送は音にしか存在しない、がこの画面の主張そのもの）。
+  読み上げ環境へは「受信中の局名」だけを `role="status"` で伝える
+- 音はブラウザ標準のみ（声＝`speechSynthesis` / 空電・時報・チャイム＝WebAudio）で、
+  **サーバー側の音声コストはゼロ**。音声一覧が空の環境では既定音声に委ね、
+  `speechSynthesis` 自体が無い環境でも段落の間だけ進めて放送は止めない
+- 帯は FM 76–95、局は 79.5（第一放送）/ 86.0（気象通報）/ 92.4（深夜便）。
+  深夜便の本編（ソフトウェア史エピソード＝新AIコンテンツ型）は別Issueで、
+  それまでは**放送休止の告知だけを流す**（実機の放送休止と同じ。開局時はsegmentsの差し替えで済む）
+- 原稿の取得は **await しない**。筐体（ダイヤル・計器・ツマミ）を先に届け、番組はPromiseのまま
+  client componentへ渡して後から解決させる（電源を入れるまで音は鳴らないので、原稿の到着が
+  描画を待たせる理由がない）。そのため `loadPrograms` は**決してrejectしない**契約にしてある
+  （RSC境界を越えたPromiseのrejectは「誰も待っていない例外」になるため）
+- **縮退方針: 放送は落ちない**。素材が取れなければ休止告知に倒す（紙面の「欄単位で休載」と同じ思想）
+  - 気象通報の沈黙の観測は**「観測してゼロ」と「観測できなかった」を必ず区別する**（`SilenceObservation`）。
+    レート上限で最新信号を取れなかったときに「沈黙の記録はありません」と読むと、
+    観測できていない事実を「異常なし」と**断言する嘘**になる（紙面の沈黙欄が観測休止に倒れるのと同じ縮退）。
+    画面を見ずに聴く放送なので、聞き手には裏を取る手段が無いことに注意する
+- お気に入りのリリース取得は `src/lib/latest-signals.ts` を紙面（`/`）と共有する。
+  取得パラメータ（`perPage=5` / `maxPages=1`）が一致していることがNextのData Cache相乗りの条件で、
+  ずれると `/` と `/radio` を続けて開くだけでGitHubへの実リクエストが倍になる
+- 意匠は紙面の三色体系（紙・墨・朱）ではなく木目と琥珀。Issue #41 の「全画面を紙面意匠へ統一」の
+  **意図的な例外**（一面は読むための紙、こちらは見ないで済ませるための機械）
 
 ## GitHub API戦略
 

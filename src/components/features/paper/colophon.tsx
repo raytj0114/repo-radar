@@ -21,6 +21,9 @@ export function Colophon({
         <span aria-hidden="true">｜</span>
         <Link href="/digest">縮刷版（ダイジェスト）</Link>
         <span aria-hidden="true">｜</span>
+        {/* 深夜放送への暫定導線。Issue #41 で紙面に「ラテ欄」を組み、そちらへ移す */}
+        <Link href="/radio">深夜放送</Link>
+        <span aria-hidden="true">｜</span>
         <form action={signOutAction}>
           <button type="submit" className={styles.linkButton}>
             退勤（ログアウト）

@@ -1,6 +1,13 @@
 import type { Page } from '@playwright/test';
 import { expect, test, watchConsoleErrors } from './fixtures';
-import { RATE_LIMIT_APP_BASE_URL, RATE_LIMITED_OWNER_PREFIX } from './constants';
+import {
+  E2E_FAVORITES,
+  RATE_LIMIT_APP_BASE_URL,
+  RATE_LIMITED_OWNER_PREFIX,
+  SEARCH_RATE_LIMIT_APP_BASE_URL,
+} from './constants';
+
+const PRIMARY_FULL_NAME = `${E2E_FAVORITES[0].owner}/${E2E_FAVORITES[0].name}`;
 
 // レート上限（GitHub API 残量フロア未満）の縮退表示のE2E（Issue #23）。
 //
@@ -67,6 +74,45 @@ test.describe('レート上限の縮退表示', () => {
     // 左耳は760px以下で畳まれるため、天気は下段ボックス固有の数字で見る
     await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
     await expect(page.getByText('データリンク不通につき休載。')).toHaveCount(0);
+
+    assertNoConsoleErrors();
+  });
+
+  // 購読面（Issue #42）: 星取帳はcoreプール。枯渇時は観測休止の帯に倒れ、台帳（DB）は生きる
+  test('購読面の星取帳は観測休止に縮退し、台帳は生きる', async ({ page }, testInfo) => {
+    const assertNoConsoleErrors = watchConsoleErrors(page);
+    await exhaustCoreRateLimit(page, testInfo.project.name);
+
+    await page.goto(`${RATE_LIMIT_APP_BASE_URL}/favorites?star=1`);
+
+    // 星取帳は短信と同じ観測休止の帯（STOP_PRESS_TEXT）
+    await expect(page.getByText('レート上限につき観測休止中')).toBeVisible();
+    // 台帳はDB読みなので枯渇の影響を受けない＝欄単位の縮退
+    await expect(page.getByRole('link', { name: PRIMARY_FULL_NAME })).toBeVisible();
+
+    assertNoConsoleErrors();
+  });
+});
+
+// searchプールの縮退は3103番で検証する。3102番の紙面テストが「coreが枯れても相場（search）は
+// 生きる」というプール分離をアサートしており、searchを枯らすテストと同居できないため。
+// 枯渇のさせ方はcoreと同じ二段構え: `ratelimited` 始まりの検索語への応答が残量0を報告し（1訪目）、
+// 以降のsearch呼び出しがfetchの手前で遮断される（2訪目）。クエリは実行ごとに一意にして
+// fetchキャッシュに当たらないようにする。並走プロジェクトが先に枯らしていても、
+// 検証するのは最終状態（2訪目の休載）だけなので成立する
+test.describe('検索枠（searchプール）の縮退表示', () => {
+  test('購読面の検索欄は休載に倒れ、台帳は生きる', async ({ page }, testInfo) => {
+    const assertNoConsoleErrors = watchConsoleErrors(page);
+
+    const poison = `${RATE_LIMITED_OWNER_PREFIX}-${testInfo.project.name}-${Date.now()}`;
+    // 1訪目: 購読面はブロッキングレンダーなので、応答完了＝残量0の観測完了
+    await page.goto(`${SEARCH_RATE_LIMIT_APP_BASE_URL}/favorites?q=${poison}`);
+
+    await page.goto(`${SEARCH_RATE_LIMIT_APP_BASE_URL}/favorites?q=probe-${Date.now()}`);
+
+    // 相場欄（market-table.tsx）と同文の休載
+    await expect(page.getByText('検索枠の上限につき本日は休載。')).toBeVisible();
+    await expect(page.getByRole('link', { name: PRIMARY_FULL_NAME })).toBeVisible();
 
     assertNoConsoleErrors();
   });

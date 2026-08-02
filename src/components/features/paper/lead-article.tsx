@@ -90,7 +90,7 @@ export function LeadHoliday({ hasFavorites }: { hasFavorites: boolean }) {
         ) : (
           <>
             観測銘柄が未登録のため一面は休載。
-            <Link href="/trending">トレンド面</Link>から銘柄を登録すると、翌朝から紙面が組まれる。
+            <Link href="/favorites">購読面</Link>から銘柄を登録すると、翌朝から紙面が組まれる。
           </>
         )}
       </div>

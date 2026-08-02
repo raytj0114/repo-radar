@@ -6,6 +6,7 @@ import {
   E2E_DIGEST,
   E2E_DIGEST_ENTRIES,
   E2E_FAVORITES,
+  E2E_GITHUB_ACCOUNT,
   E2E_TODAY_DIGEST_ENTRIES,
   E2E_USER,
   e2eDigestDay,
@@ -30,6 +31,24 @@ async function seed(): Promise<void> {
       where: { id: E2E_USER.id },
       create: { id: E2E_USER.id, name: E2E_USER.name, email: E2E_USER.email },
       update: { name: E2E_USER.name, email: E2E_USER.email },
+    });
+
+    // 購読面（Issue #42）の星取帳は Account.providerAccountId からloginを解決するため、
+    // GitHubプロバイダのAccount行が必須（実運用ではAuth.jsのadapterが初回ログイン時に作る行）
+    await prisma.account.upsert({
+      where: {
+        provider_providerAccountId: {
+          provider: 'github',
+          providerAccountId: E2E_GITHUB_ACCOUNT.providerAccountId,
+        },
+      },
+      create: {
+        userId: E2E_USER.id,
+        type: 'oauth',
+        provider: 'github',
+        providerAccountId: E2E_GITHUB_ACCOUNT.providerAccountId,
+      },
+      update: { userId: E2E_USER.id },
     });
 
     // 前回実行の残骸を消してから入れ直す。件数を数えるアサーションを成立させるため

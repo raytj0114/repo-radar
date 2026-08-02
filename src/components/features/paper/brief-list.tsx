@@ -43,7 +43,7 @@ export function BriefList({
               '六十日以内の新信号なし。'
             ) : (
               <>
-                観測銘柄が未登録。<Link href="/trending">トレンド面</Link>から登録を。
+                観測銘柄が未登録。<Link href="/favorites">購読面</Link>から登録を。
               </>
             )}
           </p>

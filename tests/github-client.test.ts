@@ -3,6 +3,8 @@ import rateLimitFixture from './fixtures/github/rate-limit.json';
 import repositoryFixture from './fixtures/github/repository.json';
 import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
+import starredFixture from './fixtures/github/starred.json';
+import userFixture from './fixtures/github/user.json';
 
 // 実APIは叩かない。envとglobal fetchをモックする。
 // `mock` 始まりの変数はvi.mockのファクトリから参照できる（vitestの巻き上げ規則）
@@ -387,5 +389,106 @@ describe('searchTrendingRepositories', () => {
     expect(error).toBeInstanceOf(client.GitHubAPIError);
     expect((error as InstanceType<typeof client.GitHubAPIError>).status).toBe(403);
     expect((error as Error).message).not.toContain('API rate limit exceeded');
+  });
+});
+
+describe('fetchUserLogin', () => {
+  it('数値IDをURLに引き当て、loginをスキーマ検証して返す（revalidate 3600秒）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(userFixture));
+    await expect(client.fetchUserLogin('583231')).resolves.toBe('octocat');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.github.com/user/583231');
+    expect(init.headers.Authorization).toBe('Bearer test-token');
+    expect(init.next).toEqual({ revalidate: 3600 });
+  });
+
+  it('404（アカウント消滅）は想定内としてnullを返す', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse({ message: 'Not Found' }, { status: 404 }));
+    await expect(client.fetchUserLogin('999')).resolves.toBeNull();
+  });
+
+  it('500では上流の本文を含まない汎用メッセージのGitHubAPIErrorを投げる', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse({ message: 'secret detail' }, { status: 500 }));
+    const error = await client.fetchUserLogin('583231').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(client.GitHubAPIError);
+    expect((error as Error).message).not.toContain('secret detail');
+  });
+
+  it('coreプールがフロア未満に遮断されたらfetchせずに拒否する（ゲートの内側にある）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(
+      fakeResponse(repositoryFixture, { headers: { 'x-ratelimit-remaining': '50' } })
+    );
+    await client.fetchRepository('vercel', 'next.js');
+    await expect(client.fetchUserLogin('583231')).rejects.toBeInstanceOf(
+      client.GitHubRateLimitError
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetchStarredRepositories', () => {
+  it('per_page=100で取得し、配列をスキーマ検証して返す（revalidate 300秒）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(starredFixture));
+    const repos = await client.fetchStarredRepositories('octocat');
+    expect(repos?.map((r) => r.full_name)).toEqual([
+      'stargazer/quiet-telemetry',
+      'stargazer/orbital-scheduler',
+    ]);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.github.com/users/octocat/starred?per_page=100');
+    expect(init.next).toEqual({ revalidate: 300 });
+  });
+
+  it('Linkヘッダのrel="next"を辿って結合し、上限の3ページ（=300件）で打ち切る', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(
+      fakeResponse([starredFixture[0]], {
+        headers: { link: '<https://api.github.com/user/583231/starred?page=2>; rel="next"' },
+      })
+    );
+    const repos = await client.fetchStarredRepositories('octocat');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(repos).toHaveLength(3);
+  });
+
+  it('404（login消滅）は想定内としてnullを返す', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse({ message: 'Not Found' }, { status: 404 }));
+    await expect(client.fetchStarredRepositories('gone')).resolves.toBeNull();
+  });
+});
+
+describe('searchRepositoriesByName', () => {
+  it('in:name修飾子とサーバー定数のper_pageでクエリを組み立てる（sortは関連度に任せる）', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValue(fakeResponse(searchFixture));
+    const result = await client.searchRepositoriesByName('ferris stream');
+    expect(result.items).toHaveLength(2);
+    const [rawUrl, init] = fetchMock.mock.calls[0];
+    const url = new URL(rawUrl as string);
+    expect(url.pathname).toBe('/search/repositories');
+    expect(url.searchParams.get('q')).toBe('ferris stream in:name');
+    expect(url.searchParams.get('per_page')).toBe('10');
+    expect(url.searchParams.get('sort')).toBeNull();
+    expect(init.next).toEqual({ revalidate: 1800 });
+  });
+
+  it('searchプールの残量がフロア(3)未満になったら検索を拒否する', async () => {
+    const client = await importClient();
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse(searchFixture, {
+        headers: { 'x-ratelimit-remaining': '2', 'x-ratelimit-resource': 'search' },
+      })
+    );
+    await client.searchRepositoriesByName('first');
+    await expect(client.searchRepositoriesByName('second')).rejects.toBeInstanceOf(
+      client.GitHubRateLimitError
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

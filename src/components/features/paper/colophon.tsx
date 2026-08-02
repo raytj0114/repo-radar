@@ -21,6 +21,9 @@ export function Colophon({
         <span aria-hidden="true">｜</span>
         <Link href="/digest">縮刷版（ダイジェスト）</Link>
         <span aria-hidden="true">｜</span>
+        {/* 購読面への暫定導線。Issue #41 のナビ規約適用時に置き場を整理する */}
+        <Link href="/favorites">購読面</Link>
+        <span aria-hidden="true">｜</span>
         {/* 深夜放送への暫定導線。Issue #41 で紙面に「ラテ欄」を組み、そちらへ移す */}
         <Link href="/radio">深夜放送</Link>
         <span aria-hidden="true">｜</span>

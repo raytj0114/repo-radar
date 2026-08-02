@@ -24,6 +24,14 @@ export const RATE_LIMIT_APP_PORT = 3102;
 export const RATE_LIMIT_APP_BASE_URL = `http://localhost:${RATE_LIMIT_APP_PORT}`;
 
 /**
+ * searchプールの縮退表示専用のインスタンス（Issue #42。購読面の検索欄）。
+ * 3102番に同居させないのは、3102番の紙面テストが「coreが枯れても相場（searchプール）は
+ * 生きている」というプール分離を恒久的にアサートしており、searchを枯らすと壊れるため。
+ */
+export const SEARCH_RATE_LIMIT_APP_PORT = 3103;
+export const SEARCH_RATE_LIMIT_APP_BASE_URL = `http://localhost:${SEARCH_RATE_LIMIT_APP_PORT}`;
+
+/**
  * E2E固定のAuth.js署名鍵。playwright.config.ts の webServer.env でサーバーへ渡し、
  * テスト側は同じ値でセッションJWTを署名する。
  * Next.jsは既にprocess.envにある値を .env.local で上書きしないため、
@@ -187,6 +195,24 @@ export const E2E_TODAY_DIGEST_ENTRIES = [
     noteless: false,
   },
 ];
+
+/**
+ * 購読面（Issue #42）の星取帳が login 解決に使うAccount行の値。
+ * global-setup がこの providerAccountId でAccount行をシードし、モックサーバーは
+ * `GET /user/:id` がこのIDに一致したときだけ login を返す（他は404 = login-missing経路）。
+ */
+export const E2E_GITHUB_ACCOUNT = {
+  providerAccountId: '99000001',
+  login: 'e2e-stargazer',
+} as const;
+
+/**
+ * 検索語がこのプレフィックスで始まるとき、モックは**その名前の合成銘柄を鋳造して**返す。
+ * 購読→解約の往復テストが実行ごとに一意な銘柄を使い、シード11件や他テストの
+ * アサーションに一切触れないための仕掛け（`slow`/`ratelimited` ownerの一意化と同じ理屈）。
+ * 鋳造銘柄のownerは `minted-owner` 固定
+ */
+export const MINTED_REPO_PREFIX = 'minted';
 
 /** リポジトリ詳細の404経路を踏むためのowner。モックサーバーはこのownerに対して404を返す */
 export const MISSING_OWNER = 'missing';

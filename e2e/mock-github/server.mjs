@@ -19,6 +19,7 @@ const readData = (file) => JSON.parse(readFileSync(join(dataDir, file), 'utf8'))
 const repositoryTemplate = readData('repository.json');
 const releasesTemplate = readData('releases.json');
 const searchResult = readData('search-repositories.json');
+const starredList = readData('starred.json');
 
 const port = Number(process.env.MOCK_GITHUB_PORT);
 /** このownerへのリクエストは404を返す（リポジトリ詳細の「見つかりません」経路の検証用） */
@@ -32,6 +33,12 @@ const slowMs = Number(process.env.MOCK_GITHUB_SLOW_MS);
 const rateLimitedOwnerPrefix = process.env.MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX;
 /** このプレフィックスで始まるownerのリリースは数年前の日付で返す（紙面「沈黙の記録」の検証用） */
 const silentOwnerPrefix = process.env.MOCK_GITHUB_SILENT_OWNER_PREFIX;
+/** `GET /user/:id` がloginを返す唯一のアカウントID（購読面のlogin解決。他のIDは404） */
+const e2eAccountId = process.env.MOCK_GITHUB_E2E_ACCOUNT_ID;
+/** 上記IDに対応するlogin。`GET /users/:login/starred` はこのloginにだけスター一覧を返す */
+const e2eLogin = process.env.MOCK_GITHUB_E2E_LOGIN;
+/** 検索語がこのプレフィックスで始まるとき、その名前の合成銘柄を鋳造して返す（購読往復テスト用） */
+const mintedPrefix = process.env.MOCK_GITHUB_MINTED_PREFIX;
 
 if (
   !Number.isInteger(port) ||
@@ -40,10 +47,13 @@ if (
   !slowOwnerPrefix ||
   !Number.isInteger(slowMs) ||
   !rateLimitedOwnerPrefix ||
-  !silentOwnerPrefix
+  !silentOwnerPrefix ||
+  !e2eAccountId ||
+  !e2eLogin ||
+  !mintedPrefix
 ) {
   throw new Error(
-    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS / MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX / MOCK_GITHUB_SILENT_OWNER_PREFIX を指定してください'
+    'MOCK_GITHUB_PORT / MOCK_GITHUB_MISSING_OWNER / MOCK_GITHUB_FAILING_RELEASES_NAME / MOCK_GITHUB_SLOW_OWNER_PREFIX / MOCK_GITHUB_SLOW_MS / MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX / MOCK_GITHUB_SILENT_OWNER_PREFIX / MOCK_GITHUB_E2E_ACCOUNT_ID / MOCK_GITHUB_E2E_LOGIN / MOCK_GITHUB_MINTED_PREFIX を指定してください'
   );
 }
 
@@ -110,12 +120,53 @@ function releasesFor(owner, name) {
   }));
 }
 
-/** `q` の `language:` 修飾子だけ解釈する。言語フィルタのE2Eを意味のあるものにするため */
+/**
+ * 検索語から鋳造する合成銘柄。テンプレートの1件目から形だけ借り、identityを差し替える。
+ * idは名前から決定的に導出する（購読actionはidでなくowner/nameを見るため衝突は実害なしだが、
+ * Reactのkey・checkboxのvalueとして一意なのが行儀）
+ */
+function mintedItemFor(name) {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.codePointAt(0)) % 1_000_000;
+  return {
+    ...searchResult.items[0],
+    id: 900_000_000 + hash,
+    name,
+    full_name: `minted-owner/${name}`,
+    owner: { ...searchResult.items[0].owner, login: 'minted-owner' },
+    html_url: `https://github.com/minted-owner/${name}`,
+    description: '鋳造銘柄（E2Eの購読往復テスト専用）',
+  };
+}
+
+/**
+ * `q` の解釈:
+ * - `:` を含むトークンは修飾子。`language:` だけ解釈し、他（`in:name` / `created:>...`）は無視する
+ * - 平叙トークン（`:` 無し）が**無ければ全件**を返す — トレンド・相場の既存クエリの挙動を
+ *   厳密に維持する（`authed.spec.ts` の件数アサーションが依存）
+ * - 平叙トークンがあれば銘柄名への部分一致（全トークンAND・大文字小文字無視）で絞る
+ * - 先頭の平叙トークンが `mintedPrefix` 始まりなら、その名前の合成銘柄を鋳造して返す
+ */
 function searchFor(query) {
-  const language = /(?:^|\s)language:(\S+)/.exec(query ?? '')?.[1];
-  const items = language
+  const tokens = (query ?? '').split(/\s+/).filter(Boolean);
+  const language = tokens
+    .find((token) => token.startsWith('language:'))
+    ?.slice('language:'.length);
+  const plainTerms = tokens.filter((token) => !token.includes(':'));
+
+  if (plainTerms[0]?.startsWith(mintedPrefix)) {
+    const item = mintedItemFor(plainTerms[0]);
+    return { ...searchResult, total_count: 1, items: [item] };
+  }
+
+  let items = language
     ? searchResult.items.filter((item) => item.language === language)
     : searchResult.items;
+  if (plainTerms.length > 0) {
+    items = items.filter((item) =>
+      plainTerms.every((term) => item.name.toLowerCase().includes(term.toLowerCase()))
+    );
+  }
   return { ...searchResult, total_count: items.length, items };
 }
 
@@ -157,7 +208,34 @@ function handle(req, res, url) {
   }
 
   if (segments[0] === 'search' && segments[1] === 'repositories') {
-    send(res, 200, searchFor(url.searchParams.get('q')), { resource: 'search' });
+    const query = url.searchParams.get('q') ?? '';
+    // 検索語が `ratelimited` 始まりなら、応答は正常系のままsearchプールの残量0を報告する
+    // （coreの `rateLimitedOwnerPrefix` と同じ二段構え。3103番インスタンス専用）
+    const exhausted = query
+      .split(/\s+/)
+      .some((token) => !token.includes(':') && token.startsWith(rateLimitedOwnerPrefix));
+    send(res, 200, searchFor(query), { resource: 'search', exhausted });
+    return;
+  }
+
+  // GET /user/:id — 数値ID→login解決（購読面の星取帳。Issue #42）。一致しないIDは404
+  if (segments[0] === 'user' && segments.length === 2) {
+    if (segments[1] === e2eAccountId) {
+      send(res, 200, { login: e2eLogin, id: Number(e2eAccountId) });
+      return;
+    }
+    notFound(res);
+    return;
+  }
+
+  // GET /users/:login/starred — スター一覧（Linkヘッダを返さない＝1ページで打ち止め。
+  // ページネーションの打ち切りはユニットテスト側で担保する）
+  if (segments[0] === 'users' && segments.length === 3 && segments[2] === 'starred') {
+    if (decodeURIComponent(segments[1]) === e2eLogin) {
+      send(res, 200, starredList);
+      return;
+    }
+    notFound(res);
     return;
   }
 
@@ -205,6 +283,11 @@ function handle(req, res, url) {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+  if (process.env.MOCK_GITHUB_DEBUG === '1') {
+    const at = new Date().toISOString();
+    console.log(`[mock-github] ${at} ${req.method} ${req.url}`);
+    res.on('finish', () => console.log(`[mock-github] ${new Date().toISOString()} done ${req.url}`));
+  }
   const segments = url.pathname.split('/').filter(Boolean);
 
   if (slowOwnerOf(segments) === null) {

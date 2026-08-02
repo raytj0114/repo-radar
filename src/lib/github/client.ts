@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { env } from '@/lib/env';
 import {
+  githubUserSchema,
   rateLimitSchema,
   releaseListSchema,
   releaseSchema,
+  repositoryListSchema,
   repositorySchema,
   searchRepositoriesSchema,
   type RateLimitSnapshot,
@@ -11,6 +13,7 @@ import {
   type Repository,
   type SearchRepositoriesResult,
 } from '@/lib/github/schemas';
+import { STARRED_IMPORT_MAX } from '@/lib/subscription-input';
 
 // GitHub REST APIクライアント（規約は .claude/skills/github-api-patterns/SKILL.md）。
 // サーバー側PATで認証する。ユーザーのOAuthトークンは使わない。
@@ -37,11 +40,32 @@ const RELEASE_FETCH_DEFAULTS = { perPage: 100, maxPages: 3 } as const;
 /** `per_page` のGitHub側上限 */
 const MAX_PER_PAGE = 100;
 
+/**
+ * スター一覧の取得量（Issue #42）。上限は「選択して取り込むUI」の実用サイズで、
+ * `STARRED_IMPORT_MAX`（取り込みactionの受理上限）から導出して二重定義を避ける。
+ * 超過分は新しい順の先頭300件で打ち切る（全量同期はしない設計判断）
+ */
+const STARRED_FETCH = {
+  perPage: MAX_PER_PAGE,
+  maxPages: Math.ceil(STARRED_IMPORT_MAX / MAX_PER_PAGE),
+} as const;
+
+/**
+ * 銘柄検索（購読面）の取得件数。購読対象を1件選ぶための検索なので上位10件で足りる。
+ * 関数内に閉じた定数にし、呼び出し側から件数を変えられる口を作らない
+ */
+const FAVORITE_SEARCH_PAGE_SIZE = 10;
+
 const REVALIDATE_SECONDS = {
   releases: 300,
   repository: 3600,
   search: 1800,
   rateLimit: 60,
+  // login解決（/user/{account_id}）。GitHubアカウントの改名は稀で、ずれても1時間で自己回復する
+  userLogin: 3600,
+  // スター一覧。GitHub側で星を付けた直後の反映待ちを数分に抑えつつ、
+  // 画面表示→取り込みactionの再取得がキャッシュに相乗りできる幅を持たせる
+  starred: 300,
 } as const;
 
 export class GitHubAPIError extends Error {
@@ -189,6 +213,39 @@ export async function fetchRepository(
   return parseWith(repositorySchema, await res.json(), `GET ${path}`);
 }
 
+/**
+ * GitHubの数値アカウントIDからloginを解決する（Issue #42 スター取り込み）。
+ * セッションのJWTにはloginが入っていないため、Account.providerAccountId を
+ * `GET /user/{account_id}` に引き当てる。404（アカウント消滅）は想定内としてnull
+ */
+export async function fetchUserLogin(accountId: string): Promise<string | null> {
+  const path = `/user/${encodeURIComponent(accountId)}`;
+  const res = await githubFetch(path, REVALIDATE_SECONDS.userLogin);
+  if (res.status === 404) return null;
+  if (!res.ok) await raiseForStatus(res, `GET ${path}`);
+  return parseWith(githubUserSchema, await res.json(), `GET ${path}`).login;
+}
+
+/**
+ * 公開スター一覧（新しい順）。既定のAcceptでは素のリポジトリ配列が返る。
+ * `STARRED_FETCH.maxPages` まで `Link: rel="next"` を辿り、超過分は打ち切る
+ * （取り込みは選択式なので全量は不要。上限はサーバー定数のみで決める）。
+ * 404（login消滅・改名直後）は想定内としてnullを返す
+ */
+export async function fetchStarredRepositories(login: string): Promise<Repository[] | null> {
+  const basePath = `/users/${encodeURIComponent(login)}/starred`;
+  const repositories: Repository[] = [];
+  let url: string | null = `${basePath}?per_page=${STARRED_FETCH.perPage}`;
+  for (let page = 0; page < STARRED_FETCH.maxPages && url !== null; page++) {
+    const res: Response = await githubFetch(url, REVALIDATE_SECONDS.starred);
+    if (res.status === 404) return null;
+    if (!res.ok) await raiseForStatus(res, `GET ${basePath}`);
+    repositories.push(...parseWith(repositoryListSchema, await res.json(), `GET ${basePath}`));
+    url = nextPageUrl(res.headers.get('link'));
+  }
+  return repositories;
+}
+
 /** 取得量の指定。呼び出し側（サーバー）の定数のみで決める。クライアント入力は渡さない */
 export type ReleaseFetchOptions = FreshOption & {
   /** 1ページあたりの取得件数。GitHubの上限100に丸める */
@@ -288,6 +345,22 @@ export async function searchTrendingRepositories(
   });
   const path = `/search/repositories?${params.toString()}`;
   const res = await githubFetch(path, fresh ? 'no-store' : REVALIDATE_SECONDS.search);
+  if (!res.ok) await raiseForStatus(res, 'GET /search/repositories');
+  return parseWith(searchRepositoriesSchema, await res.json(), 'GET /search/repositories');
+}
+
+/**
+ * 銘柄の名前検索（購読面の検索欄。Issue #42）。`in:name` で名前のみを対象にし、
+ * sort未指定＝GitHubの関連度順に任せる（購読対象を探す用途ではスター順より当たりが良い）。
+ * `term` は `repoSearchQuerySchema`（`:` を通さない）で検証済みであること
+ */
+export async function searchRepositoriesByName(term: string): Promise<SearchRepositoriesResult> {
+  const params = new URLSearchParams({
+    q: `${term} in:name`,
+    per_page: String(FAVORITE_SEARCH_PAGE_SIZE),
+  });
+  const path = `/search/repositories?${params.toString()}`;
+  const res = await githubFetch(path, REVALIDATE_SECONDS.search);
   if (!res.ok) await raiseForStatus(res, 'GET /search/repositories');
   return parseWith(searchRepositoriesSchema, await res.json(), 'GET /search/repositories');
 }

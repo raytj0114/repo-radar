@@ -10,7 +10,12 @@ import type { RateLimitSnapshot } from '@/lib/github/schemas';
 import { loadLatestSignals } from '@/lib/latest-signals';
 import { listSilent, paperDateFor, pickFrontPage, weatherFor, type PaperDate } from '@/lib/paper';
 import { prisma } from '@/lib/prisma';
-import { buildOutageStations, buildStations, type RadioStation } from '@/lib/radio';
+import {
+  buildOutageStations,
+  buildStations,
+  type RadioStation,
+  type SilenceObservation,
+} from '@/lib/radio';
 
 // 深夜放送は紙面の続きではなく別の機械なので、題字のテンプレート（%s | RepoRadar）を使わない
 export const metadata: Metadata = {
@@ -53,11 +58,18 @@ async function loadPrograms(userId: string, paper: PaperDate): Promise<RadioStat
     const parsed = digestEntriesSchema.safeParse(digestRow?.entries);
     const entries = parsed.success ? parsed.data : [];
 
-    const { signals } = await loadLatestSignals(favorites);
+    // 取得の欠落は必ず放送へ伝える。観測できなかったことを「沈黙はない」と言い換えない
+    // （紙面の沈黙欄が観測休止に倒れるのと同じ縮退。skills/github-api-patterns「黙って空を返さない」）
+    const { signals, rateLimited, failedCount } = await loadLatestSignals(favorites);
+    const observation: SilenceObservation = rateLimited
+      ? 'rate-limited'
+      : failedCount > 0
+        ? 'partial'
+        : 'complete';
 
     return buildStations(
       { paper, entries, front: pickFrontPage(entries), weather, rateLimit },
-      { paper, silent: listSilent(signals, now), weather, rateLimit }
+      { paper, silent: listSilent(signals, now), observation, weather, rateLimit }
     );
   } catch (error) {
     console.error('[radio] program assembly failed:', error);

@@ -252,10 +252,18 @@ export function composeScheduledBroadcast(input: ScheduledBroadcastInput): Radio
   return segments;
 }
 
+/**
+ * 沈黙の観測がどこまで届いたか。
+ * `complete` 以外のとき「沈黙はない」と断言してはいけない（観測ゼロと観測不能は別物）
+ */
+export type SilenceObservation = 'complete' | 'rate-limited' | 'partial';
+
 export type WeatherBroadcastInput = {
   paper: PaperDate;
   /** 紙面の「沈黙の記録」と同じ並び（`listSilent`） */
   silent: readonly SilentRow[];
+  /** お気に入り全件の最新信号を取り切れたか（`loadLatestSignals` の結果から決める） */
+  observation: SilenceObservation;
   weather: Weather | null;
   rateLimit: RateLimitSnapshot | null;
 };
@@ -265,7 +273,7 @@ export type WeatherBroadcastInput = {
  * 紙面では表で一覧できるが、放送では1銘柄1段落でゆっくり読む
  */
 export function composeWeatherBroadcast(input: WeatherBroadcastInput): RadioSegment[] {
-  const { paper, silent, weather, rateLimit } = input;
+  const { paper, silent, observation, weather, rateLimit } = input;
   const segments: RadioSegment[] = [
     {
       text: `レポレーダー、気象通報です。${toSpokenDayJa(paper.issuedAtIso)}、六時の観測。`,
@@ -280,12 +288,7 @@ export function composeWeatherBroadcast(input: WeatherBroadcastInput): RadioSegm
     { text: '続いて、沈黙の観測です。', pre: 900 },
   ];
 
-  if (silent.length === 0) {
-    segments.push({
-      text: '本日、沈黙の記録は、ありません。すべての銘柄が、この半年に、信号を発しています。',
-      pre: 600,
-    });
-  } else {
+  if (silent.length > 0) {
     for (const row of silent) {
       segments.push({
         text:
@@ -294,6 +297,18 @@ export function composeWeatherBroadcast(input: WeatherBroadcastInput): RadioSegm
         pre: 600,
       });
     }
+    if (observation !== 'complete') {
+      segments.push({ text: 'なお、一部の銘柄は、観測できていません。', pre: 600 });
+    }
+  } else if (observation === 'complete') {
+    segments.push({
+      text: '本日、沈黙の記録は、ありません。すべての銘柄が、この半年に、信号を発しています。',
+      pre: 600,
+    });
+  } else {
+    // 観測できていないのに「沈黙はない」と断言しない（黙って空を返さないのと同じ理由）。
+    // 紙面の沈黙欄が観測休止に倒れるときは、放送も休止を告げる
+    segments.push({ text: '沈黙の観測は、ただいま、休止しています。', pre: 600 });
   }
 
   segments.push({ text: '以上、レポレーダー気象通報でした。', pre: 900 });

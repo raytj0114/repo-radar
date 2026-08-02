@@ -218,10 +218,21 @@ describe('composeWeatherBroadcast（気象通報）', () => {
     },
   ];
 
-  it('残量と沈黙の観測を読む', () => {
-    const text = transcript(
-      composeWeatherBroadcast({ paper: PAPER, silent, weather: WEATHER, rateLimit: RATE_LIMIT })
+  function weatherReport(overrides: Partial<Parameters<typeof composeWeatherBroadcast>[0]> = {}) {
+    return transcript(
+      composeWeatherBroadcast({
+        paper: PAPER,
+        silent,
+        observation: 'complete',
+        weather: WEATHER,
+        rateLimit: RATE_LIMIT,
+        ...overrides,
+      })
     );
+  }
+
+  it('残量と沈黙の観測を読む', () => {
+    const text = weatherReport();
     expect(text).toContain('二日、六時の観測。');
     expect(text).toContain('コア資源。残量、4999。上限、5000。晴れ。');
     expect(text).toContain(
@@ -230,18 +241,30 @@ describe('composeWeatherBroadcast（気象通報）', () => {
   });
 
   it('沈黙が無い日はその旨を読む', () => {
-    const text = transcript(
-      composeWeatherBroadcast({ paper: PAPER, silent: [], weather: WEATHER, rateLimit: RATE_LIMIT })
-    );
+    const text = weatherReport({ silent: [] });
     expect(text).toContain('本日、沈黙の記録は、ありません。');
   });
 
   it('残量が観測できなくても放送は続ける', () => {
-    const text = transcript(
-      composeWeatherBroadcast({ paper: PAPER, silent, weather: null, rateLimit: null })
-    );
+    const text = weatherReport({ weather: null, rateLimit: null });
     expect(text).toContain('コア資源。ただいま、観測できません。');
     expect(text).toContain('以上、レポレーダー気象通報でした。');
+  });
+
+  // 観測ゼロ（本当に沈黙が無い）と観測不能（レート上限で見えていない）は別物。
+  // 取り違えると「すべての銘柄が信号を発しています」と嘘を放送し続ける
+  it('レート上限で観測できなかったときは「沈黙なし」と断言しない', () => {
+    const text = weatherReport({ silent: [], observation: 'rate-limited' });
+    expect(text).toContain('沈黙の観測は、ただいま、休止しています。');
+    expect(text).not.toContain('沈黙の記録は、ありません');
+    expect(text).not.toContain('すべての銘柄が');
+  });
+
+  it('一部の取得に失敗したときは観測が欠けている旨を添える', () => {
+    const text = weatherReport({ observation: 'partial' });
+    // 取れた銘柄は読んだうえで、網羅していないことを告げる
+    expect(text).toContain('silent archive、legacy parser');
+    expect(text).toContain('なお、一部の銘柄は、観測できていません。');
   });
 });
 
@@ -254,7 +277,13 @@ describe('局の組み立て', () => {
       weather: WEATHER,
       rateLimit: RATE_LIMIT,
     },
-    { paper: PAPER, silent: [], weather: WEATHER, rateLimit: RATE_LIMIT }
+    {
+      paper: PAPER,
+      silent: [],
+      observation: 'complete',
+      weather: WEATHER,
+      rateLimit: RATE_LIMIT,
+    }
   );
 
   it('3局が帯の内側に、同調範囲を重ねずに並ぶ', () => {

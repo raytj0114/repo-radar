@@ -67,6 +67,11 @@ type AudioEngine = {
   noiseGain: GainNode;
   whistleOsc: OscillatorNode;
   whistleGain: GainNode;
+  /**
+   * 合図音（時報・チャイム・予告音）専用の出口。
+   * 時報は4秒先まで発音を予約するため、ここを絞らないと同調を外しても鳴り続ける
+   */
+  signalGain: GainNode;
 };
 
 /** 電源投入時にだけ作る（自動再生の許しはユーザー操作の内側でしか得られない） */
@@ -106,8 +111,13 @@ function createAudioEngine(): AudioEngine | null {
   whistleOsc.connect(whistleGain).connect(master);
   whistleOsc.start();
 
+  // 合図音の出口。予約済みの発音をまとめて止められるようにする
+  const signalGain = ctx.createGain();
+  signalGain.gain.value = 1;
+  signalGain.connect(master);
+
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-  return { ctx, master, noiseGain, whistleOsc, whistleGain };
+  return { ctx, master, noiseGain, whistleOsc, whistleGain, signalGain };
 }
 
 export function RadioSet({ programs }: { programs: Promise<RadioStation[]> }) {
@@ -177,39 +187,61 @@ export function RadioSet({ programs }: { programs: Promise<RadioStation[]> }) {
     envelope.gain.linearRampToValueAtTime(gain, at + 0.015);
     envelope.gain.setValueAtTime(gain, at + duration - 0.03);
     envelope.gain.linearRampToValueAtTime(0, at + duration);
-    osc.connect(envelope).connect(engine.master);
+    osc.connect(envelope).connect(engine.signalGain);
     osc.start(at);
     osc.stop(at + duration + 0.05);
+  }, []);
+
+  /** 合図音の口を開ける。予約の前に必ず呼ぶ（前回の消音を解除する） */
+  const openSignalGate = useCallback(() => {
+    const engine = audioRef.current;
+    if (!engine) return;
+    engine.signalGain.gain.cancelScheduledValues(engine.ctx.currentTime);
+    engine.signalGain.gain.setValueAtTime(1, engine.ctx.currentTime);
+  }, []);
+
+  /** 予約済みの合図音を含めて黙らせる。ダイヤルを回した瞬間に時報が残らないようにする */
+  const silenceSignals = useCallback(() => {
+    const engine = audioRef.current;
+    if (!engine) return;
+    const t = engine.ctx.currentTime;
+    engine.signalGain.gain.cancelScheduledValues(t);
+    engine.signalGain.gain.setValueAtTime(engine.signalGain.gain.value, t);
+    // 断ち切ると耳につくクリックが出るので、ごく短いフェードで落とす
+    engine.signalGain.gain.linearRampToValueAtTime(0, t + 0.03);
   }, []);
 
   /** 時報: プ・プ・プ・ポーン */
   const playJihou = useCallback(() => {
     const engine = audioRef.current;
     if (!engine) return;
+    openSignalGate();
     const t = engine.ctx.currentTime + 0.2;
     beep(440, t, 0.1, 0.06);
     beep(440, t + 1, 0.1, 0.06);
     beep(440, t + 2, 0.1, 0.06);
     beep(880, t + 3, 0.9, 0.07);
-  }, [beep]);
+  }, [beep, openSignalGate]);
 
   /** 深夜便のチャイム: 柔らかい二音 */
   const playChime = useCallback(() => {
     const engine = audioRef.current;
     if (!engine) return;
+    openSignalGate();
     const t = engine.ctx.currentTime + 0.1;
     beep(659.25, t, 1.6, 0.035);
     beep(523.25, t + 0.7, 2.0, 0.03);
-  }, [beep]);
+  }, [beep, openSignalGate]);
 
   /** 破壊的変更のお知らせ */
   const playAlert = useCallback(() => {
     const engine = audioRef.current;
     if (!engine) return;
+    openSignalGate();
     const t = engine.ctx.currentTime;
     beep(988, t, 0.12, 0.05);
     beep(988, t + 0.25, 0.12, 0.05);
-  }, [beep]);
+  }, [beep, openSignalGate]);
 
   /** 同調の具合にあわせて空電と搬送波を整える */
   useEffect(() => {
@@ -247,18 +279,20 @@ export function RadioSet({ programs }: { programs: Promise<RadioStation[]> }) {
     return () => synth.removeEventListener('voiceschanged', pickVoices);
   }, [pickVoices]);
 
+  /** 進行中の放送を黙らせる。声・段落のタイマー・予約済みの合図音のすべてを止める */
   const stopSpeaking = useCallback(() => {
     tokenRef.current += 1;
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    silenceSignals();
     try {
       window.speechSynthesis?.cancel();
     } catch {
       // 実装差で例外を投げるブラウザがある。止められなくても後段の世代チェックが効く
     }
-  }, []);
+  }, [silenceSignals]);
 
   /** 原稿を1段落ずつ読む。世代が変わっていたら即座に降りる */
   const speakFrom = useCallback(

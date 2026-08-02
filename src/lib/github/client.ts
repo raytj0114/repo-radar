@@ -172,7 +172,11 @@ export type FreshOption = {
   fresh?: boolean;
 };
 
-/** リポジトリ詳細。404（消滅・改名・private化）は想定内としてnullを返す */
+/**
+ * リポジトリ詳細。404（消滅・private化）は想定内としてnullを返す。
+ * 改名は404にならない: GitHubが301を返し、fetchが既定でリダイレクトを追うため
+ * 新しい `full_name` で200が返る（同一オリジンなのでAuthorizationヘッダも維持される）
+ */
 export async function fetchRepository(
   owner: string,
   repo: string,

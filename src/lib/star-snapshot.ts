@@ -36,13 +36,13 @@ export type StarSnapshotTarget = {
 export type StarSnapshotResult = {
   /** 観測日（YYYY-MM-DD。収集窓の終端のUTC日付） */
   date: string;
-  /** 星数を観測できた銘柄数（= upsertを試みた行数） */
+  /** 星数を観測できた銘柄数（= 書き込みを試みた行数） */
   observed: number;
-  /** 保存できた行数 */
+  /** 新しく記録した行数。既存行は先勝ちでスキップするので、同日の再実行では0になる */
   written: number;
   /** 星数を取得できなかったお気に入り数（取得失敗・404） */
   fetchFailed: number;
-  /** 保存に失敗した行数 */
+  /** 保存に失敗した行数（一括書き込みなので observed 全件か0） */
   writeFailed: number;
   /** トレンド検索に失敗した（= この日はトレンド銘柄が欠測になる） */
   trendingFailed: boolean;
@@ -58,8 +58,10 @@ export function normalizeFullName(fullName: string): string {
 }
 
 /**
- * 採取対象の集合を作る（純関数）。トレンドとお気に入りは重なりうるので正規化して重複排除し、
- * 先に現れたトレンド側の観測を優先する（同時刻の観測なので値は実質同じ）。
+ * 採取対象の集合を作る（純関数）。トレンドとお気に入りは重なりうるので正規化して重複排除する。
+ * 重なった銘柄では**お気に入り側を優先する**: `/repos/{owner}/{repo}` の直接読みが正で、
+ * `/search/repositories` の星数は非同期に更新される二次インデックス越しの値だから
+ * （`fresh` で無効化できるのはNextのData Cacheだけで、GitHub側のインデックス遅れには効かない）。
  * 並びはfullName昇順に固定して、書き込み順とログを実行ごとにぶれさせない。
  */
 export function mergeStarObservations(
@@ -67,7 +69,7 @@ export function mergeStarObservations(
   favorites: readonly StarObservation[]
 ): StarObservation[] {
   const byFullName = new Map<string, StarObservation>();
-  for (const observation of [...trending, ...favorites]) {
+  for (const observation of [...favorites, ...trending]) {
     const fullName = normalizeFullName(observation.fullName);
     if (!byFullName.has(fullName)) {
       byFullName.set(fullName, { fullName, stars: observation.stars });
@@ -81,8 +83,11 @@ export function mergeStarObservations(
  *
  * - 取得はトレンド検索（1リクエスト）とお気に入りのリポジトリメタ（1リポジトリ1リクエスト）を同時に投げる
  * - どちらも Data Cache をバイパスする（`fresh`）。訂正不能な点データを古い値で焼き付けないため
- * - 同日の再実行（手動叩き・リトライ）は upsert で冪等。名目時刻が固定なので上書きしても害はない
- * - 銘柄単位・行単位で失敗を隔離する（1件の失敗で他の銘柄を落とさない）
+ * - 保存は**先勝ち**（`skipDuplicates` = ON CONFLICT DO NOTHING）。同日の再実行は冪等だが、
+ *   既存行は決して上書きしない。窓は `[D 21:00, D+1 21:00)` の24時間あるため、日中に手で叩くと
+ *   「Dの21:00の観測」として何時間も後の星数を焼き付けてしまう（訂正不能・痕跡も残らない）。
+ *   21:00 UTCに最も近い最初の観測を正とし、再実行は欠けた行の補修だけを行う
+ * - 銘柄単位で失敗を隔離する（1件の取得失敗で他の銘柄を落とさない）
  */
 export async function collectStarSnapshots(
   window: DigestWindow,
@@ -126,9 +131,12 @@ export async function collectStarSnapshots(
       );
       return;
     }
-    // null はリポジトリ消滅・改名（404）。観測できないので欠測として数えるだけ
+    // null は404（リポジトリ消滅・private化）。この銘柄はこの日以降ずっと欠測になるので黙らせない。
+    // 改名はここに来ない: GitHubは301を返し、fetchが既定でリダイレクトを追うため
+    // 新しい full_name で200が返る（＝履歴が旧名・新名の2キーに割れる。表示側で吸収する）
     if (result.value === null) {
       fetchFailed += 1;
+      console.error(`[stars] repository not found repo=${repo.owner}/${repo.name}（恒久欠測）`);
       return;
     }
     favorites.push({ fullName: result.value.full_name, stars: result.value.stargazers_count });
@@ -138,22 +146,32 @@ export async function collectStarSnapshots(
   const date = new Date(`${day}T00:00:00.000Z`);
   let written = 0;
   let writeFailed = 0;
-  for (const { fullName, stars } of observations) {
+  if (observations.length > 0) {
     try {
-      await prisma.repoStarSnapshot.upsert({
-        where: { fullName_date: { fullName, date } },
-        create: { fullName, stars, date },
-        update: { stars },
+      // 先勝ち・1往復。並行実行が重なっても後から来た方が既存行を書き換えない
+      const result = await prisma.repoStarSnapshot.createMany({
+        data: observations.map(({ fullName, stars }) => ({ fullName, stars, date })),
+        skipDuplicates: true,
       });
-      written += 1;
+      written = result.count;
     } catch (error) {
-      writeFailed += 1;
-      console.error(`[stars] snapshot write failed repo=${fullName} date=${day}:`, error);
+      // 全行が同型（string + int）なので、単独行だけ失敗する事象は実質起きない＝まとめて計上する
+      writeFailed = observations.length;
+      console.error(
+        `[stars] snapshot write failed date=${day} rows=${observations.length}:`,
+        error
+      );
     }
   }
 
-  // DoD検証用: 採取フェーズが1回のcronで1度だけ走ったことの証跡
-  console.info(`[stars] collected date=${day} observed=${observations.length} written=${written}`);
+  // DoD検証用: 採取フェーズが1回のcronで1度だけ走ったことの証跡。
+  // 1件も観測できなかった日はバックフィルできない＝恒久欠測なので、info に埋もれさせない
+  const summary = `[stars] collected date=${day} observed=${observations.length} written=${written}`;
+  if (observations.length === 0) {
+    console.error(`${summary}（この日の星数は恒久欠測になる）`);
+  } else {
+    console.info(summary);
+  }
 
   return {
     date: day,

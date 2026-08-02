@@ -21,7 +21,7 @@ const {
   fetchReleasesMock,
   fetchRepositoryMock,
   searchTrendingRepositoriesMock,
-  snapshotUpsertMock,
+  snapshotCreateManyMock,
   summaryFindUniqueMock,
   summaryUpsertMock,
   generateStructuredMock,
@@ -32,7 +32,7 @@ const {
   fetchReleasesMock: vi.fn(),
   fetchRepositoryMock: vi.fn(),
   searchTrendingRepositoriesMock: vi.fn(),
-  snapshotUpsertMock: vi.fn(),
+  snapshotCreateManyMock: vi.fn(),
   summaryFindUniqueMock: vi.fn(),
   summaryUpsertMock: vi.fn(),
   generateStructuredMock: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('@/lib/prisma', () => ({
     dailyDigest: { findMany: digestFindManyMock, upsert: digestUpsertMock },
     favoriteRepo: { findMany: favoritesFindManyMock },
     releaseSummary: { findUnique: summaryFindUniqueMock, upsert: summaryUpsertMock },
-    repoStarSnapshot: { upsert: snapshotUpsertMock },
+    repoStarSnapshot: { createMany: snapshotCreateManyMock },
   },
 }));
 
@@ -355,7 +355,9 @@ describe('runDailyDigest', () => {
       incomplete_results: false,
       items: [],
     });
-    snapshotUpsertMock.mockResolvedValue({});
+    snapshotCreateManyMock.mockImplementation(({ data }: { data: unknown[] }) =>
+      Promise.resolve({ count: data.length })
+    );
     digestFindManyMock.mockResolvedValue([]);
     digestUpsertMock.mockResolvedValue({});
     summaryFindUniqueMock.mockResolvedValue(null);
@@ -638,20 +640,17 @@ describe('runDailyDigest', () => {
     // 同じリポジトリを2ユーザーがお気に入りにしていても取得・記録は1回
     expect(fetchRepositoryMock).toHaveBeenCalledTimes(1);
     expect(fetchRepositoryMock).toHaveBeenCalledWith('vercel', 'next.js', { fresh: true });
-    expect(snapshotUpsertMock).toHaveBeenCalledTimes(1);
-    expect(snapshotUpsertMock.mock.calls[0][0]).toEqual({
-      where: {
-        fullName_date: {
+    expect(snapshotCreateManyMock).toHaveBeenCalledTimes(1);
+    expect(snapshotCreateManyMock.mock.calls[0][0]).toEqual({
+      data: [
+        {
           fullName: 'vercel/next.js',
+          stars: REPOSITORY.stargazers_count,
           date: new Date('2026-07-25T00:00:00.000Z'),
         },
-      },
-      create: {
-        fullName: 'vercel/next.js',
-        stars: REPOSITORY.stargazers_count,
-        date: new Date('2026-07-25T00:00:00.000Z'),
-      },
-      update: { stars: REPOSITORY.stargazers_count },
+      ],
+      // 既存行は上書きしない（日中の再実行が21:00の観測を書き換えないため）
+      skipDuplicates: true,
     });
     // 採取は当日窓のみ（前日窓はバックフィルしない＝過去の星数は取得できないため）
     expect(result.stars).toEqual({
@@ -667,15 +666,15 @@ describe('runDailyDigest', () => {
   it('採取フェーズはリリース取得・要約生成より前に走る（タイムアウト時に回復不能な方を優先する）', async () => {
     await runDailyDigest(NOW);
 
-    expect(snapshotUpsertMock).toHaveBeenCalled();
+    expect(snapshotCreateManyMock).toHaveBeenCalled();
     expect(generateStructuredMock).toHaveBeenCalled();
-    const snapshotWrite = snapshotUpsertMock.mock.invocationCallOrder[0];
+    const snapshotWrite = snapshotCreateManyMock.mock.invocationCallOrder[0];
     expect(snapshotWrite).toBeLessThan(fetchReleasesMock.mock.invocationCallOrder[0]);
     expect(snapshotWrite).toBeLessThan(generateStructuredMock.mock.invocationCallOrder[0]);
   });
 
   it('採取フェーズが落ちても朝刊の生成は止まらない（失敗隔離）', async () => {
-    snapshotUpsertMock.mockRejectedValue(new Error('db down'));
+    snapshotCreateManyMock.mockRejectedValue(new Error('db down'));
     fetchRepositoryMock.mockRejectedValue(new Error('github down'));
     searchTrendingRepositoriesMock.mockRejectedValue(new Error('github down'));
 

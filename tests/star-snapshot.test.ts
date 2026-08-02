@@ -7,16 +7,16 @@ import {
   normalizeFullName,
 } from '@/lib/star-snapshot';
 
-const { snapshotUpsertMock, fetchRepositoryMock, searchTrendingRepositoriesMock } = vi.hoisted(
+const { snapshotCreateManyMock, fetchRepositoryMock, searchTrendingRepositoriesMock } = vi.hoisted(
   () => ({
-    snapshotUpsertMock: vi.fn(),
+    snapshotCreateManyMock: vi.fn(),
     fetchRepositoryMock: vi.fn(),
     searchTrendingRepositoriesMock: vi.fn(),
   })
 );
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { repoStarSnapshot: { upsert: snapshotUpsertMock } },
+  prisma: { repoStarSnapshot: { createMany: snapshotCreateManyMock } },
 }));
 
 vi.mock('@/lib/github/client', async (importOriginal) => ({
@@ -73,12 +73,13 @@ describe('mergeStarObservations', () => {
     ]);
   });
 
-  it('ケース違いで重なる銘柄は1行に畳み、トレンド側の観測を採る', () => {
+  // /search の星数は二次インデックス越しで遅れうるため、直接読みのお気に入り側を正とする
+  it('ケース違いで重なる銘柄は1行に畳み、お気に入り側（/reposの直接読み）の観測を採る', () => {
     const merged = mergeStarObservations(
       [{ fullName: 'vercel/next.js', stars: 100 }],
       [{ fullName: 'Vercel/Next.js', stars: 999 }]
     );
-    expect(merged).toEqual([{ fullName: 'vercel/next.js', stars: 100 }]);
+    expect(merged).toEqual([{ fullName: 'vercel/next.js', stars: 999 }]);
   });
 
   it('どちらも空なら空を返す', () => {
@@ -97,22 +98,22 @@ describe('collectStarSnapshots', () => {
     fetchRepositoryMock.mockResolvedValue(
       repository({ full_name: 'prisma/prisma', stargazers_count: 30 })
     );
-    snapshotUpsertMock.mockResolvedValue({});
+    snapshotCreateManyMock.mockImplementation(({ data }: { data: unknown[] }) =>
+      Promise.resolve({ count: data.length })
+    );
   });
 
-  it('トレンドとお気に入りの星数を、窓終端の日付で冪等に保存する', async () => {
+  it('トレンドとお気に入りの星数を、窓終端の日付で1往復にまとめて保存する', async () => {
     const result = await collectStarSnapshots(WINDOW, [FAVORITE]);
 
-    expect(snapshotUpsertMock).toHaveBeenCalledTimes(2);
-    // 同日の再実行が行を増やさない形（uniqueキー指定 + updateはstarsのみ）
-    expect(snapshotUpsertMock.mock.calls[0][0]).toEqual({
-      where: { fullName_date: { fullName: 'prisma/prisma', date: OBSERVED_DATE } },
-      create: { fullName: 'prisma/prisma', stars: 30, date: OBSERVED_DATE },
-      update: { stars: 30 },
+    expect(snapshotCreateManyMock).toHaveBeenCalledTimes(1);
+    expect(snapshotCreateManyMock.mock.calls[0][0]).toEqual({
+      data: [
+        { fullName: 'prisma/prisma', stars: 30, date: OBSERVED_DATE },
+        { fullName: 'zed-industries/zed', stars: 50, date: OBSERVED_DATE },
+      ],
+      skipDuplicates: true,
     });
-    expect(snapshotUpsertMock.mock.calls[1][0].where.fullName_date.fullName).toBe(
-      'zed-industries/zed'
-    );
     expect(result).toEqual({
       date: '2026-07-25',
       observed: 2,
@@ -121,6 +122,17 @@ describe('collectStarSnapshots', () => {
       writeFailed: 0,
       trendingFailed: false,
     });
+  });
+
+  // 窓は24時間あるので、日中の手動実行が「21:00の観測」として何時間も後の星数を焼き付けてはいけない
+  it('同日の再実行は既存行を上書きせず、欠けている行だけを足す（先勝ち）', async () => {
+    // 既に記録済みの1件はスキップされ、count には数えられない
+    snapshotCreateManyMock.mockResolvedValue({ count: 1 });
+
+    const result = await collectStarSnapshots(WINDOW, [FAVORITE]);
+
+    expect(snapshotCreateManyMock.mock.calls[0][0].skipDuplicates).toBe(true);
+    expect(result).toMatchObject({ observed: 2, written: 1, writeFailed: 0 });
   });
 
   it('採取はData Cacheを踏まない（訂正不能な点データを古い観測で焼き付けない）', async () => {
@@ -152,33 +164,35 @@ describe('collectStarSnapshots', () => {
 
     const result = await collectStarSnapshots(WINDOW, [FAVORITE]);
 
-    expect(snapshotUpsertMock).toHaveBeenCalledTimes(1);
-    expect(snapshotUpsertMock.mock.calls[0][0].create.fullName).toBe('prisma/prisma');
+    expect(snapshotCreateManyMock.mock.calls[0][0].data).toEqual([
+      { fullName: 'prisma/prisma', stars: 30, date: OBSERVED_DATE },
+    ]);
     expect(result).toMatchObject({ observed: 1, written: 1, trendingFailed: true });
   });
 
   it('お気に入りの取得失敗・404は欠測として数え、他の銘柄は保存する', async () => {
     fetchRepositoryMock
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce(null) // 消滅・改名
+      .mockResolvedValueOnce(null) // 消滅・private化
       .mockResolvedValueOnce(repository({ full_name: 'prisma/prisma', stargazers_count: 30 }));
 
     const result = await collectStarSnapshots(WINDOW, [
       { owner: 'gone', name: 'repo' },
-      { owner: 'renamed', name: 'repo' },
+      { owner: 'private', name: 'repo' },
       FAVORITE,
     ]);
 
     expect(result).toMatchObject({ observed: 2, written: 2, fetchFailed: 2 });
+    // 恒久欠測になる404は黙って数えるだけにしない
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('private/repo'));
   });
 
-  it('1行の書き込み失敗が他の銘柄の保存を止めない', async () => {
-    snapshotUpsertMock.mockRejectedValueOnce(new Error('db down')).mockResolvedValueOnce({});
+  it('書き込みが落ちても例外を投げず、失敗件数として報告する', async () => {
+    snapshotCreateManyMock.mockRejectedValue(new Error('db down'));
 
     const result = await collectStarSnapshots(WINDOW, [FAVORITE]);
 
-    expect(snapshotUpsertMock).toHaveBeenCalledTimes(2);
-    expect(result).toMatchObject({ observed: 2, written: 1, writeFailed: 1 });
+    expect(result).toMatchObject({ observed: 2, written: 0, writeFailed: 2 });
   });
 
   it('お気に入りが無くてもトレンド銘柄は採取する', async () => {
@@ -186,5 +200,15 @@ describe('collectStarSnapshots', () => {
 
     expect(fetchRepositoryMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({ observed: 1, written: 1 });
+  });
+
+  it('1件も観測できなかった日は書き込まず、恒久欠測としてerrorに残す', async () => {
+    searchTrendingRepositoriesMock.mockRejectedValue(new Error('search down'));
+
+    const result = await collectStarSnapshots(WINDOW, []);
+
+    expect(snapshotCreateManyMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ observed: 0, written: 0, trendingFailed: true });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('恒久欠測'));
   });
 });

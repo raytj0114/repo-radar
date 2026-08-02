@@ -1,6 +1,7 @@
 import { digestDayOf, type DigestWindow } from '@/lib/digest-window';
 import { fetchRepository, searchTrendingRepositories } from '@/lib/github/client';
 import { settle } from '@/lib/github/concurrent';
+import { MARKET_WINDOW_DAYS } from '@/lib/paper';
 import { prisma } from '@/lib/prisma';
 
 // 星数の日次スナップショット（Issue #39）。RepoStarSnapshot への唯一の書き込み口。
@@ -11,13 +12,11 @@ import { prisma } from '@/lib/prisma';
 // 呼び出し側（runDailyDigest）は要約生成より前にこのフェーズを置く。
 
 /**
- * 採取するトレンド銘柄数。相場欄の表示は6行だが、順位の入れ替わりで翌日の前日比が
- * 欠けないよう広めに採る（検索は per_page が増えても1リクエストのまま）。
+ * 採取するトレンド銘柄数。相場欄の表示（`MARKET_ROW_LIMIT` = 6行）より深く採るのは、
+ * 順位の入れ替わりで翌日の前日比が欠けないようにするため（検索は per_page が
+ * 増えても1リクエストのまま）。**この値は常に相場欄の行数より十分大きく保つ**。
  */
 const TRENDING_SNAPSHOT_LIMIT = 30;
-
-/** トレンドの観測窓（日）。相場欄・/trending と同じ30日窓に揃える */
-const TRENDING_WINDOW_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -98,7 +97,9 @@ export async function collectStarSnapshots(
   const [trendingSettled, favoriteSettled] = await Promise.all([
     settle(
       searchTrendingRepositories({
-        createdAfter: new Date(window.end.getTime() - TRENDING_WINDOW_DAYS * DAY_MS),
+        // 相場欄は描画時刻起点、採取は窓終端起点。採取側が常に等しいか広くなる向きなので、
+        // 表示銘柄は採取集合に含まれる（同一の集合ではない。docs/ARCHITECTURE.md 参照）
+        createdAfter: new Date(window.end.getTime() - MARKET_WINDOW_DAYS * DAY_MS),
         perPage: TRENDING_SNAPSHOT_LIMIT,
         fresh: true,
       })

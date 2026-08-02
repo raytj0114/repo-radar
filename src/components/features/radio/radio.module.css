@@ -1,0 +1,489 @@
+/* ============================================================
+   深夜放送 JORR — 受信機（docs/mocks/04-night-radio.html の移植。Issue #32）。
+   木目 #55371f / 琥珀 #ffb45e / 朱針 #c8452c。
+   画面はラジオチューナーだけ。番組表も、原稿も、進捗バーも出さない。
+   最良のセッションは、画面を見ないこと。
+
+   紙面（paper.module.css）とは意匠体系が別（Issue #41 の全画面紙面化の意図的な例外）。
+   一面は「読む」ための紙、こちらは「見ないで済ませる」ための機械なので、
+   同じ組版語彙に寄せると受信機であることが伝わらなくなる。
+   ============================================================ */
+
+.stage {
+  --amber: #ffb45e;
+  --amber-dim: #7a5228;
+  --wood1: #55371f;
+  --wood2: #2c1a0c;
+  --face: #171008;
+  --cream: #e6d5a8;
+  --needle: #c8452c;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  background: radial-gradient(120% 100% at 50% 20%, #120b06 0%, #070402 55%, #030201 100%);
+  font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  /* 縦は伸びてよいが、横は決して溢れさせない（CLAUDE.md 不変条件7） */
+  overflow-x: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* ---- 筐体 ---- */
+.unit {
+  width: min(560px, 100%);
+}
+.cabinet {
+  background:
+    linear-gradient(175deg, rgba(255, 190, 120, 0.1), rgba(0, 0, 0, 0.35) 60%),
+    repeating-linear-gradient(92deg, var(--wood1) 0 7px, #4a2f1a 7px 11px, var(--wood1) 11px 23px),
+    var(--wood2);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 210, 150, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6);
+}
+.facepanel {
+  background: linear-gradient(180deg, #1d1409, var(--face) 40%, #100a05);
+  border-radius: 8px;
+  padding: 14px 16px 16px;
+  box-shadow:
+    inset 0 2px 10px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 1px rgba(255, 200, 140, 0.07);
+}
+
+/* ---- ダイヤル盤 ---- */
+.dial {
+  position: relative;
+  height: 84px;
+  background: linear-gradient(180deg, #241708, #1a1006);
+  border-radius: 5px;
+  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  transition: box-shadow 1.4s;
+}
+.unit.on .dial {
+  box-shadow:
+    inset 0 0 26px rgba(255, 157, 60, 0.16),
+    inset 0 0 14px rgba(0, 0, 0, 0.7);
+}
+.tick {
+  position: absolute;
+  bottom: 26px;
+  width: 1px;
+  background: var(--amber-dim);
+  transition: background 1.4s;
+}
+.unit.on .tick {
+  background: var(--amber);
+  opacity: 0.75;
+}
+.freqnum {
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--amber-dim);
+  transition: color 1.4s;
+}
+.unit.on .freqnum {
+  color: var(--amber);
+}
+.stname {
+  position: absolute;
+  bottom: 6px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--amber-dim);
+  white-space: nowrap;
+  transition:
+    color 1.4s,
+    text-shadow 1.4s;
+}
+.unit.on .stname {
+  color: var(--amber);
+  text-shadow: 0 0 6px rgba(255, 157, 60, 0.7);
+}
+.stmark {
+  position: absolute;
+  bottom: 26px;
+  width: 3px;
+  height: 20px;
+  background: var(--amber-dim);
+  transform: translateX(-1px);
+  transition:
+    background 1.4s,
+    box-shadow 1.4s;
+}
+.unit.on .stmark {
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(255, 157, 60, 0.8);
+}
+.needle {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--needle);
+  box-shadow: 0 0 6px rgba(200, 69, 44, 0.9);
+  transition: left 0.14s linear;
+}
+
+/* ---- 計器列: VU / ニキシー窓 ---- */
+.meters {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+.vu {
+  flex: 1;
+  min-width: 0;
+  height: 74px;
+  position: relative;
+  background: radial-gradient(140% 120% at 50% 115%, #3a2c12, #241a0a 70%);
+  border-radius: 6px;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  transition: background 1.4s;
+}
+.unit.on .vu {
+  background: radial-gradient(140% 120% at 50% 115%, #6b5424, #33270e 75%);
+}
+.arc {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 12px;
+  height: 44px;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  border-top: 2px solid var(--amber-dim);
+  transition: border-color 1.4s;
+}
+.unit.on .arc {
+  border-color: var(--cream);
+}
+.redzone {
+  position: absolute;
+  right: 10%;
+  top: 12px;
+  width: 22%;
+  height: 44px;
+  border-radius: 0 100% 0 0 / 0 100% 0 0;
+  border-top: 2px solid transparent;
+}
+.unit.on .redzone {
+  border-color: var(--needle);
+}
+.vlabel {
+  position: absolute;
+  bottom: 6px;
+  width: 100%;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.5em;
+  color: var(--amber-dim);
+  transition: color 1.4s;
+}
+.unit.on .vlabel {
+  color: var(--cream);
+}
+.vneedle {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 2px;
+  height: 52px;
+  background: #14100a;
+  transform-origin: 50% 100%;
+  transform: rotate(-48deg);
+}
+.unit.on .vneedle {
+  background: #0c0906;
+}
+
+.nixiebox {
+  width: 42%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nixie {
+  flex: 1;
+  background: #0b0603;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 10px rgba(0, 0, 0, 1),
+    inset 0 0 0 1px rgba(255, 157, 60, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  letter-spacing: 0.12em;
+  color: transparent;
+  transition:
+    color 1.4s,
+    text-shadow 1.4s;
+  white-space: nowrap;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.unit.on .nixie {
+  color: var(--amber);
+  text-shadow:
+    0 0 10px rgba(255, 157, 60, 0.95),
+    0 0 26px rgba(255, 120, 30, 0.5);
+}
+.bandlabel {
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.4em;
+  color: var(--amber-dim);
+}
+
+/* ---- 操作列: 電源 / ツマミ ---- */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+.power {
+  position: relative;
+  cursor: pointer;
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+.power:focus-visible,
+.knob:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 4px;
+}
+.pwPlate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.pwSwitch {
+  width: 46px;
+  height: 24px;
+  border-radius: 12px;
+  background: #241a0e;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
+  position: relative;
+  transition: background 0.6s;
+}
+.pwSwitch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #8a6a45, #4a3520);
+  transition: left 0.25s;
+}
+.unit.on .pwSwitch {
+  background: #3a2a12;
+}
+.unit.on .pwSwitch::after {
+  left: 24px;
+  background: linear-gradient(180deg, #ffce8a, #b07c3e);
+  box-shadow: 0 0 8px rgba(255, 180, 94, 0.6);
+}
+.pwLabel {
+  font-size: 9px;
+  letter-spacing: 0.45em;
+  color: var(--amber-dim);
+}
+.tag {
+  position: absolute;
+  left: 54px;
+  top: -6px;
+  width: 118px;
+  background: #d9c99a;
+  color: #3a2c14;
+  font-family: 'Segoe Script', 'Yu Mincho', cursive;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  padding: 6px 8px;
+  border-radius: 2px;
+  transform: rotate(4deg);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+  transition: opacity 1s;
+}
+.tag::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 10px;
+  width: 14px;
+  height: 1px;
+  background: #9a8a60;
+  transform: rotate(-25deg);
+}
+.unit.on .tag {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ツマミと銘板の台。回転するのはツマミだけで、銘板は面板に留まる */
+.knobPlate {
+  position: relative;
+  flex: none;
+}
+.knob {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #6a4c2c, #241708 68%), #241708;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.8),
+    inset 0 1px 1px rgba(255, 210, 150, 0.25);
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+  flex: none;
+}
+.knob:active {
+  cursor: grabbing;
+}
+.dot {
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 0 5px rgba(230, 213, 168, 0.6);
+}
+.klabel {
+  position: absolute;
+  bottom: -18px;
+  width: 100%;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.4em;
+  color: var(--amber-dim);
+}
+
+.nameplate {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 8.5px;
+  letter-spacing: 0.45em;
+  color: rgba(255, 200, 140, 0.28);
+}
+
+/* 紙面へ戻る道。受信機の外側に、灯りを落とした一行だけ置く */
+.exit {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+}
+.exit a {
+  color: rgba(255, 200, 140, 0.3);
+  text-decoration: none;
+  transition: color 0.6s;
+}
+.exit a:hover,
+.exit a:focus-visible {
+  color: rgba(255, 200, 140, 0.75);
+}
+
+/* ---- 消灯（聴取中は部屋が暗くなる）と、ひとことだけの囁き ---- */
+.dim {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 7s ease-in;
+}
+.whisper {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 9%;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  color: rgba(255, 200, 140, 0);
+  transition: color 2.5s;
+  pointer-events: none;
+}
+.whisper.show {
+  color: rgba(255, 200, 140, 0.55);
+}
+
+/* 受信状態は音と計器で分かるが、読み上げ環境にも伝える（原稿は決して入れない） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 480px) {
+  .stage {
+    align-items: flex-start;
+    padding: 8vh 12px 24px;
+  }
+  .cabinet {
+    padding: 12px 12px 10px;
+  }
+  .facepanel {
+    padding: 12px 12px 14px;
+  }
+  .dial {
+    height: 76px;
+  }
+  .nixiebox {
+    width: 46%;
+  }
+  .nixie {
+    font-size: 17px;
+  }
+  .knob {
+    width: 80px;
+    height: 80px;
+  }
+  .tag {
+    width: 104px;
+    font-size: 10.5px;
+    left: 50px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .needle {
+    transition: none;
+  }
+  .dim {
+    transition: opacity 0.5s;
+  }
+}

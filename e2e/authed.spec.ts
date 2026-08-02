@@ -64,6 +64,8 @@ test.describe('紙面（トップ）', () => {
 
     // 奥付: 紙面内ナビ（ヘッダーの代替）とログアウト
     await expect(page.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
+    // 深夜放送への導線（Issue #32。#41 でラテ欄へ移す）
+    await expect(page.getByRole('link', { name: '深夜放送' })).toHaveAttribute('href', '/radio');
     await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
 
     assertNoConsoleErrors();
@@ -229,6 +231,7 @@ test.describe('リポジトリ詳細', () => {
 anonTest.describe('未認証', () => {
   for (const path of [
     '/',
+    '/radio',
     '/trending',
     '/digest',
     `/repos/${PRIMARY_FAVORITE.owner}/${PRIMARY_FAVORITE.name}`,

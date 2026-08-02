@@ -7,6 +7,7 @@ const PUBLIC_PATHS = ['/login'];
 // 認証必須画面（Issue #16 でカバー範囲を拡張）
 const AUTHED_PATHS = [
   '/',
+  '/radio',
   '/trending',
   '/trending?language=Rust',
   '/digest',

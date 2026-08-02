@@ -54,3 +54,18 @@ test.describe('デスクトップのナビ', () => {
     await expect(page.getByRole('banner').getByRole('link', { name: 'トレンド' })).toBeVisible();
   });
 });
+
+// / は全画面紙面でグローバルヘッダーを持たない（Issue #31）。両プロファイルで検証する
+test.describe('紙面（/）のナビ分岐', () => {
+  test('ハンバーガーを出さず、紙面の耳ナビで遷移できる', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.getByRole('button', { name: 'メニューを開く' })).toHaveCount(0);
+    await page
+      .getByRole('navigation', { name: '紙面の耳' })
+      .getByRole('link', { name: 'トレンド面' })
+      .click();
+    await expect(page).toHaveURL(/\/trending$/);
+    await expect(page.getByRole('heading', { name: 'トレンド', level: 1 })).toBeVisible();
+  });
+});

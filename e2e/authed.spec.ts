@@ -3,6 +3,7 @@ import {
   E2E_DIGEST,
   E2E_DIGEST_ENTRIES,
   E2E_FAVORITES,
+  E2E_TODAY_DIGEST_ENTRIES,
   FAILING_RELEASES_NAME,
   MISSING_OWNER,
   MOCK_GITHUB_BASE_URL,
@@ -13,46 +14,77 @@ import {
 // GitHub APIは e2e/mock-github/server.mjs に差し替わっており、DBは e2e/global-setup.ts が
 // 決定的にシードしている。外部への実通信が無いことは fixtures.ts のガードが各テストで検証する。
 
-const [PRIMARY_FAVORITE, SECONDARY_FAVORITE] = E2E_FAVORITES;
+const [PRIMARY_FAVORITE] = E2E_FAVORITES;
 const PRIMARY_FULL_NAME = `${PRIMARY_FAVORITE.owner}/${PRIMARY_FAVORITE.name}`;
-const SECONDARY_FULL_NAME = `${SECONDARY_FAVORITE.owner}/${SECONDARY_FAVORITE.name}`;
 
 /** モックのリリースは3件だがdraftが1件混ざるため、画面に出るのはリポジトリあたり2件 */
 const VISIBLE_RELEASES_PER_REPO = 2;
 
-test.describe('ダッシュボード', () => {
-  test('お気に入りの最新リリースが新しい順に並ぶ', async ({ page }) => {
+test.describe('紙面（トップ）', () => {
+  test('題字・一面・二番手・短信・沈黙・相場・天気・奥付が組まれる', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'ダッシュボード', level: 1 })).toBeVisible();
-    await expect(page.locator('main ol > li')).toHaveCount(
-      E2E_FAVORITES.length * VISIBLE_RELEASES_PER_REPO
-    );
-    await expect(page.getByRole('link', { name: PRIMARY_FULL_NAME }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: SECONDARY_FULL_NAME }).first()).toBeVisible();
-    // draftリリースはタイムラインに載せない
-    await expect(page.getByText('v17 (draft)')).toHaveCount(0);
+    // 題字と日付行（号数・和文日付は純関数のユニットテスト側で担保し、ここでは構造のみ見る）
+    await expect(page.getByRole('heading', { name: '日刊 RepoRadar', level: 1 })).toBeVisible();
+    await expect(page.getByText('朝刊（六時締）')).toBeVisible();
+
+    // 一面: 当日ダイジェストのシード（E2E_TODAY_DIGEST_ENTRIES）の1件目が
+    // 決定則（破壊的変更優先）で選ばれ、headline・lede・【破壊的変更】が組まれる
+    const lead = E2E_TODAY_DIGEST_ENTRIES[0];
+    await expect(page.getByRole('link', { name: lead.headline })).toBeVisible();
+    await expect(page.getByText(lead.lede)).toBeVisible();
+    await expect(page.getByText('【破壊的変更】')).toBeVisible();
+    // 二番手は別リポジトリの2件目
+    await expect(
+      page.getByRole('link', { name: E2E_TODAY_DIGEST_ENTRIES[1].headline })
+    ).toBeVisible();
+
+    // 短信: 一面・二番手で扱った銘柄（next.js / prisma）は載らず、他の最新信号が並ぶ。
+    // モックは相対日付を返すため「着信（十三日前）」相当の行が常に存在する
+    await expect(page.getByText('v16.3.0-canary.1 が着信').first()).toBeVisible();
+    await expect(
+      page.locator('main ul > li').filter({ hasText: `▽${PRIMARY_FAVORITE.name}` })
+    ).toHaveCount(0);
+    // draftリリースは短信にも載らない（旧タイムアラインからの回帰防止を引き継ぐ）
+    await expect(page.getByText('v17.0.0-draft')).toHaveCount(0);
+
+    // 沈黙の記録: silent ownerだけが数年前の日付を返し、一年超の太字（dead行）になる
+    const silentRow = page.getByRole('row', { name: /silent-archive\/legacy-parser/ });
+    await expect(silentRow).toBeVisible();
+    await expect(silentRow.locator('td').first()).toHaveCSS('font-weight', '700');
+
+    // 相場: searchモック由来の銘柄と星数（18420 → ja-JPロケールの桁区切り）
+    await expect(page.getByRole('cell', { name: 'octocat/ferris-stream-processor' })).toBeVisible();
+    await expect(page.getByText('18,420')).toBeVisible();
+
+    // 天気: /rate_limit モック（4999/5000）→ 晴
+    await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
+    await expect(page.getByText('晴', { exact: true })).toBeVisible();
+
+    // 奥付: 紙面内ナビ（ヘッダーの代替）とログアウト
+    await expect(page.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
 
     assertNoConsoleErrors();
   });
 
   // ストリーミングは「初回レスポンスのHTMLに何がどの順で入っているか」で検証する。
   // 描画タイミングを見る方式はモックが速いとすり抜けるため、バイト列の順序で確定的に判定する。
-  // スケルトンの目印は aria-label にする（aria-busy は loading.tsx 側にもあり区別できない）
-  test('シェルはリリース取得を待たずに先に送出される', async ({ page }) => {
+  // スケルトンの目印は aria-label にする（aria-busy は他のフォールバックにもあり区別できない）
+  test('シェル（題字）は本文の取得を待たずに先に送出される', async ({ page }) => {
     const html = await (await page.request.get('/')).text();
 
     const shellIndex = html.indexOf('<h1');
-    const skeletonIndex = html.indexOf('リリースを読み込み中');
-    const releaseIndex = html.indexOf('v16.2.0');
+    const skeletonIndex = html.indexOf('組版中');
+    const bodyIndex = html.indexOf(E2E_TODAY_DIGEST_ENTRIES[0].headline);
 
-    expect(shellIndex, 'シェルの見出しが初回HTMLに含まれていない').toBeGreaterThanOrEqual(0);
-    // 見出し（シェル）→ スケルトン（Suspenseフォールバック）→ 後追いのリリース本体、の順に届く
+    expect(shellIndex, 'シェル（題字）が初回HTMLに含まれていない').toBeGreaterThanOrEqual(0);
+    // 題字（シェル）→ スケルトン（Suspenseフォールバック）→ 後追いの紙面本文、の順に届く
     expect(skeletonIndex, 'Suspenseフォールバックが初回HTMLに含まれていない').toBeGreaterThan(
       shellIndex
     );
-    expect(releaseIndex, 'リリース本体がシェルより先に届いている').toBeGreaterThan(skeletonIndex);
+    expect(bodyIndex, '紙面本文がシェルより先に届いている').toBeGreaterThan(skeletonIndex);
   });
 });
 

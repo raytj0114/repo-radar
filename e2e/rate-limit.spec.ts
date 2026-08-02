@@ -47,7 +47,7 @@ test.describe('レート上限の縮退表示', () => {
     assertNoConsoleErrors();
   });
 
-  test('ダッシュボードは一部取得できなかった旨のNoticeを添えて描画する', async ({
+  test('紙面はシェルを保ったまま短信が観測休止になり、相場と天気は生きる', async ({
     page,
   }, testInfo) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
@@ -55,13 +55,18 @@ test.describe('レート上限の縮退表示', () => {
 
     await page.goto(`${RATE_LIMIT_APP_BASE_URL}/`);
 
-    // 詳細と違い、ダッシュボードは画面を保ったまま帯で知らせる（部分縮退）
-    await expect(page.getByRole('heading', { name: 'ダッシュボード', level: 1 })).toBeVisible();
+    // 紙面は落ちない: 題字・日付行のシェルは平常どおり組まれる
+    await expect(page.getByRole('heading', { name: '日刊 RepoRadar', level: 1 })).toBeVisible();
+    // coreプールの遮断 → 短信・沈黙は観測休止の帯に縮退する
+    await expect(page.getByText('レート上限につき観測休止中').first()).toBeVisible();
+    // レート枠はプール別（core/search）: coreが遮断されても相場（search）と
+    // 天気（/rate_limit はゲートの外）は生きている。この分離が壊れると両方とも休載になる
     await expect(
-      page.getByText('レート上限に達したため、一部の最新情報を取得できませんでした')
+      page.getByRole('cell', { name: 'octocat/observability-dashboard-toolkit' })
     ).toBeVisible();
-    // お気に入り全件が遮断されるため、タイムラインは空になる
-    await expect(page.getByText('表示できるリリースがありません')).toBeVisible();
+    // 左耳は760px以下で畳まれるため、天気は下段ボックス固有の数字で見る
+    await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
+    await expect(page.getByText('データリンク不通につき休載。')).toHaveCount(0);
 
     assertNoConsoleErrors();
   });

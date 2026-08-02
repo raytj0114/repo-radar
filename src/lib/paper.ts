@@ -86,11 +86,12 @@ export function pickFrontPage(entries: readonly DigestEntry[]): FrontPage {
   });
   const lead = ranked[0] ?? null;
   const leadKey = lead ? paperRepoKey(lead.owner, lead.repo) : null;
+  // findはlead自身のキーを除外して探すため、見つかった時点で必ず別リポジトリ
   const second = ranked.find((entry) => paperRepoKey(entry.owner, entry.repo) !== leadKey) ?? null;
   const featuredRepoKeys = new Set<string>();
   if (lead) featuredRepoKeys.add(paperRepoKey(lead.owner, lead.repo));
   if (second) featuredRepoKeys.add(paperRepoKey(second.owner, second.repo));
-  return { lead, second: second === lead ? null : second, featuredRepoKeys };
+  return { lead, second, featuredRepoKeys };
 }
 
 /**

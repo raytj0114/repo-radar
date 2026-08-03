@@ -34,10 +34,13 @@ function queryStateOf(q: string | string[] | undefined): QueryState {
  *
  * 一面と違い、本文を**Suspenseでストリーミングしない**（意図的な設計判断）:
  * この面は同一ページのServer Action（購読・解約・取り込み）で毎回再レンダーされるが、
- * Next 16.2 では「Suspense中の境界を含むページ」へのaction応答ストリームが正常終了せず、
- * クライアントが更新を受け取れない（`next start` で6/6再現。Suspenseを外すと6/6成功）。
- * 既定表示（q/starなし）の本文はDB1クエリのみ＝GitHub呼び出しゼロなので、
- * ブロッキングレンダーでも体感は変わらない
+ * `next start` 環境（=E2E）ではSuspense境界があるとaction応答が完了せず
+ * クライアントが更新を受け取れない事象が決定的に再現した（Suspenseを外すと6/6成功）。
+ * ただし因果の帰属は未確定で、上流には輸送層（HTTP/1.1の接続数上限）要因を示す報告がある
+ * （vercel/next.js #96109 / #95714。**HTTP/2のVercel本番では起きない可能性**）。
+ * Suspense撤去はE2E決定性のための対処であり、既定表示（q/starなし）の本文は
+ * DB1クエリのみ＝GitHub呼び出しゼロなのでブロッキングレンダーでも体感は変わらない。
+ * #41で全画面へ一般化する前にVercelプレビューでの実測が必要（メモリ・チップ起票済み）
  */
 export default async function FavoritesPage({
   searchParams,

@@ -33,6 +33,9 @@ export function StarImportForm({ rows }: { rows: StarRow[] }) {
     if (ids.length === 0) return;
     startTransition(async () => {
       await importStarredFavorites({ ids });
+      // 取り込んだ行は再描画で「購読中」（チェック不能）になるため、選択件数の表示も畳む。
+      // リセットしないと「選択　N銘柄」と有効なボタンだけが残り、表示が実態と食い違う
+      setSelectedCount(0);
     });
   };
 

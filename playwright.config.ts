@@ -4,13 +4,17 @@ import {
   APP_PORT,
   E2E_AUTH_SECRET,
   E2E_DATABASE_URL,
+  E2E_GITHUB_ACCOUNT,
   FAILING_RELEASES_NAME,
+  MINTED_REPO_PREFIX,
   MISSING_OWNER,
   MOCK_GITHUB_BASE_URL,
   MOCK_GITHUB_PORT,
   RATE_LIMIT_APP_BASE_URL,
   RATE_LIMIT_APP_PORT,
   RATE_LIMITED_OWNER_PREFIX,
+  SEARCH_RATE_LIMIT_APP_BASE_URL,
+  SEARCH_RATE_LIMIT_APP_PORT,
   SILENT_OWNER_PREFIX,
   SLOW_OWNER_PREFIX,
   SLOW_RESPONSE_MS,
@@ -63,10 +67,18 @@ export default defineConfig({
         MOCK_GITHUB_SLOW_MS: String(SLOW_RESPONSE_MS),
         MOCK_GITHUB_RATE_LIMITED_OWNER_PREFIX: RATE_LIMITED_OWNER_PREFIX,
         MOCK_GITHUB_SILENT_OWNER_PREFIX: SILENT_OWNER_PREFIX,
+        MOCK_GITHUB_E2E_ACCOUNT_ID: E2E_GITHUB_ACCOUNT.providerAccountId,
+        MOCK_GITHUB_E2E_LOGIN: E2E_GITHUB_ACCOUNT.login,
+        MOCK_GITHUB_MINTED_PREFIX: MINTED_REPO_PREFIX,
       },
     },
     {
-      command: `npm run build && npm run start -- --port ${APP_PORT}`,
+      // build後にNextのData Cache（.next/cache/fetch-cache）を消してから起動する。
+      // このキャッシュはビルドを跨いで残り、期限切れ後もstale-while-revalidateで
+      // 「前回実行時のモック応答」を一度配ってしまうため、モックデータを変更した直後の
+      // E2Eが古い内容で非決定的に落ちる（Issue #42 で実際に発生。片プロファイルだけ旧データを
+      // 掴み、もう片方は再検証後の新データで通る、という不一致になる）
+      command: `npm run build && node -e "fs.rmSync('.next/cache/fetch-cache',{recursive:true,force:true})" && npm run start -- --port ${APP_PORT}`,
       url: APP_BASE_URL,
       // 既存サーバーを再利用しない。再利用を許すと古い成果物に対してテストが通り、
       // 「壊したのにE2Eが緑」という誤検証が起きる（DoDの「意図的に崩すと落ちる」が担保できない）。
@@ -83,6 +95,15 @@ export default defineConfig({
       // webServerは配列順に起動されるため、直前のエントリのビルド完了後に立ち上がる（追加ビルドは無い）
       command: `npm run start -- --port ${RATE_LIMIT_APP_PORT}`,
       url: RATE_LIMIT_APP_BASE_URL,
+      reuseExistingServer: false,
+      env: APP_SERVER_ENV,
+    },
+    {
+      // searchプールの縮退表示専用のインスタンス（Issue #42。購読面の検索欄）。
+      // 3102番と分けるのは、3102番の紙面テストが「coreが枯れても相場（searchプール）は生きる」
+      // というプール分離をアサートしており、searchを枯らすテストと同居できないため
+      command: `npm run start -- --port ${SEARCH_RATE_LIMIT_APP_PORT}`,
+      url: SEARCH_RATE_LIMIT_APP_BASE_URL,
       reuseExistingServer: false,
       env: APP_SERVER_ENV,
     },

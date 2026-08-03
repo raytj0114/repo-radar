@@ -47,6 +47,17 @@ export const searchRepositoriesSchema = z.object({
   items: z.array(repositorySchema),
 });
 
+/** `GET /users/{login}/starred`（既定Accept）は素のリポジトリ配列を返す */
+export const repositoryListSchema = z.array(repositorySchema);
+
+/**
+ * `GET /user/{account_id}` のレスポンス。購読面のスター取り込み（Issue #42）で
+ * Account.providerAccountId（数値ID）からloginを解決するために使う。使うのはloginのみ
+ */
+export const githubUserSchema = z.object({
+  login: z.string().min(1),
+});
+
 /**
  * `GET /rate_limit` のレスポンス。紙面の天気欄（API残量）に使う（Issue #31）。
  * 使うのはcoreプールの残量と上限のみ

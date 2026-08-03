@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  githubUserSchema,
   rateLimitSchema,
   releaseListSchema,
   releaseSchema,
+  repositoryListSchema,
   repositorySchema,
   searchRepositoriesSchema,
 } from '@/lib/github/schemas';
@@ -10,6 +12,8 @@ import rateLimitFixture from './fixtures/github/rate-limit.json';
 import repositoryFixture from './fixtures/github/repository.json';
 import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
+import starredFixture from './fixtures/github/starred.json';
+import userFixture from './fixtures/github/user.json';
 
 describe('repositorySchema', () => {
   it('実レスポンス相当のfixtureをパースできる（未知フィールドは落とされる）', () => {
@@ -103,6 +107,41 @@ describe('searchRepositoriesSchema', () => {
   it('items が配列でないとエラーになる', () => {
     const broken = { ...searchFixture, items: null };
     expect(searchRepositoriesSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+describe('repositoryListSchema', () => {
+  it('スター一覧（素のリポジトリ配列）のfixtureをパースできる', () => {
+    const result = repositoryListSchema.safeParse(starredFixture);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].full_name).toBe('stargazer/quiet-telemetry');
+      // description/language/pushed_at のnullを許容する（2件目で担保）
+      expect(result.data[1].language).toBeNull();
+    }
+  });
+
+  it('1件でも壊れていると全体がエラーになる', () => {
+    const broken = [...starredFixture, { id: 'not-a-number' }];
+    expect(repositoryListSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+describe('githubUserSchema', () => {
+  it('実レスポンス相当のfixtureをパースし、loginのみを使う', () => {
+    const result = githubUserSchema.safeParse(userFixture);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.login).toBe('octocat');
+      expect(result.data).not.toHaveProperty('followers');
+    }
+  });
+
+  it('login が欠けている・空文字だとエラーになる', () => {
+    const { login, ...broken } = userFixture;
+    expect(githubUserSchema.safeParse(broken).success).toBe(false);
+    expect(githubUserSchema.safeParse({ ...userFixture, login: '' }).success).toBe(false);
   });
 });
 

@@ -12,6 +12,10 @@ const AUTHED_PATHS = [
   '/trending?language=Rust',
   '/digest',
   `/repos/${E2E_FAVORITES[0].owner}/${E2E_FAVORITES[0].name}`,
+  // 購読面（Issue #42）: 台帳のみ / 検索結果表 / 星取帳（長銘柄を含む）の3状態
+  '/favorites',
+  '/favorites?q=ferris',
+  '/favorites?star=1',
 ];
 
 anonTest.describe('横スクロール検知（未認証ページ）', () => {

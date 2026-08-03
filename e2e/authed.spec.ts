@@ -64,6 +64,8 @@ test.describe('紙面（トップ）', () => {
 
     // 奥付: 紙面内ナビ（ヘッダーの代替）とログアウト
     await expect(page.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
+    // 購読面への導線（Issue #42。#41 で置き場を整理する）
+    await expect(page.getByRole('link', { name: '購読面' })).toHaveAttribute('href', '/favorites');
     // 深夜放送への導線（Issue #32。#41 でラテ欄へ移す）
     await expect(page.getByRole('link', { name: '深夜放送' })).toHaveAttribute('href', '/radio');
     await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
@@ -232,6 +234,7 @@ anonTest.describe('未認証', () => {
   for (const path of [
     '/',
     '/radio',
+    '/favorites',
     '/trending',
     '/digest',
     `/repos/${PRIMARY_FAVORITE.owner}/${PRIMARY_FAVORITE.name}`,

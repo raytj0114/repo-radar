@@ -7,6 +7,7 @@ import {
   E2E_DIGEST_ENTRIES,
   E2E_FAVORITES,
   E2E_GITHUB_ACCOUNT,
+  E2E_STAR_SNAPSHOTS,
   E2E_TODAY_DIGEST_ENTRIES,
   E2E_USER,
   e2eDigestDay,
@@ -104,6 +105,19 @@ async function seed(): Promise<void> {
         },
       });
     }
+
+    // 相場欄の前日比（Issue #40）。実運用ではcronだけが書く表なので、E2Eでは
+    // 「採取済みの数日ぶん」をここで作る（前日比・欠測を挟む直近観測比・履歴なしの三態）
+    await prisma.repoStarSnapshot.deleteMany({
+      where: { fullName: { in: E2E_STAR_SNAPSHOTS.map((snapshot) => snapshot.fullName) } },
+    });
+    await prisma.repoStarSnapshot.createMany({
+      data: E2E_STAR_SNAPSHOTS.map(({ fullName, dayOffset, stars }) => ({
+        fullName,
+        stars,
+        date: new Date(`${e2eDigestDay(dayOffset)}T00:00:00Z`),
+      })),
+    });
   } finally {
     await prisma.$disconnect();
   }

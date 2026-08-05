@@ -58,6 +58,17 @@ test.describe('紙面（トップ）', () => {
     await expect(page.getByRole('cell', { name: 'octocat/ferris-stream-processor' })).toBeVisible();
     await expect(page.getByText('18,420')).toBeVisible();
 
+    // 前日比（Issue #40）: 数字の出所はシードした星数スナップショットの実差分だけ。
+    // 三態（前日比 / 欠測を挟む直近観測比 / 履歴なしの日割）が同じ列に並ぶ
+    const marketRow = (fullName: string) => page.getByRole('row').filter({ hasText: fullName });
+    await expect(marketRow('octocat/observability-dashboard-toolkit')).toContainText('▲300');
+    await expect(marketRow('octocat/ferris-stream-processor')).toContainText('▼120※');
+    await expect(marketRow('octocat/nolang')).toContainText('日割');
+    // 読み上げ用ラベルで「前日比」と「直近観測比」の別まで固定する。可視テキストの部分一致だけだと
+    // `▲300` は `▲300※` にもマッチするため、観測日の読み戻しが1日ずれても緑のまま通ってしまう
+    await expect(page.getByRole('cell', { name: '前日比 300増', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '直近観測比 120減', exact: true })).toBeVisible();
+
     // 天気: /rate_limit モック（4999/5000）→ 晴
     await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
     await expect(page.getByText('晴', { exact: true })).toBeVisible();

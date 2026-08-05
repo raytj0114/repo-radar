@@ -197,6 +197,24 @@ export const E2E_TODAY_DIGEST_ENTRIES = [
 ];
 
 /**
+ * 相場欄の前日比（Issue #40）を決定的に検証するための星数スナップショット。
+ * `dayOffset` は紙面の号（窓終端）からの日数で、`e2eDigestDay` と同じ規則。
+ *
+ * global-setup とテスト実行の間に 21:00 UTC 境界を跨ぐと号が1日進むため、
+ * **どちらの号でも同じ表示になる置き方**にしてある（朝刊シードと同じ配慮）:
+ * - `observability-dashboard-toolkit`: +1/0/−1 を等差（+300）→ どちらでも「前日比 ▲300」
+ * - `ferris-stream-processor`: 0 と −3 の2点のみ → どちらでも欠測を挟む「▼120※」
+ * - `nolang`: 履歴なし → 日割へ縮退
+ */
+export const E2E_STAR_SNAPSHOTS = [
+  { fullName: 'octocat/observability-dashboard-toolkit', dayOffset: 1, stars: 18600 },
+  { fullName: 'octocat/observability-dashboard-toolkit', dayOffset: 0, stars: 18300 },
+  { fullName: 'octocat/observability-dashboard-toolkit', dayOffset: -1, stars: 18000 },
+  { fullName: 'octocat/ferris-stream-processor', dayOffset: 0, stars: 9000 },
+  { fullName: 'octocat/ferris-stream-processor', dayOffset: -3, stars: 9120 },
+] as const;
+
+/**
  * 購読面（Issue #42）の星取帳が login 解決に使うAccount行の値。
  * global-setup がこの providerAccountId でAccount行をシードし、モックサーバーは
  * `GET /user/:id` がこのIDに一致したときだけ login を返す（他は404 = login-missing経路）。

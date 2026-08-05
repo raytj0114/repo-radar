@@ -3,20 +3,26 @@ import { digestWindowFor } from '@/lib/digest-window';
 import type { Repository } from '@/lib/github/schemas';
 import {
   collectStarSnapshots,
+  loadStarHistories,
   mergeStarObservations,
-  normalizeFullName,
 } from '@/lib/star-snapshot';
 
-const { snapshotCreateManyMock, fetchRepositoryMock, searchTrendingRepositoriesMock } = vi.hoisted(
-  () => ({
-    snapshotCreateManyMock: vi.fn(),
-    fetchRepositoryMock: vi.fn(),
-    searchTrendingRepositoriesMock: vi.fn(),
-  })
-);
+const {
+  snapshotCreateManyMock,
+  snapshotFindManyMock,
+  fetchRepositoryMock,
+  searchTrendingRepositoriesMock,
+} = vi.hoisted(() => ({
+  snapshotCreateManyMock: vi.fn(),
+  snapshotFindManyMock: vi.fn(),
+  fetchRepositoryMock: vi.fn(),
+  searchTrendingRepositoriesMock: vi.fn(),
+}));
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { repoStarSnapshot: { createMany: snapshotCreateManyMock } },
+  prisma: {
+    repoStarSnapshot: { createMany: snapshotCreateManyMock, findMany: snapshotFindManyMock },
+  },
 }));
 
 vi.mock('@/lib/github/client', async (importOriginal) => ({
@@ -54,12 +60,6 @@ const WINDOW = digestWindowFor(NOW);
 const OBSERVED_DATE = new Date('2026-07-25T00:00:00.000Z');
 
 const FAVORITE = { owner: 'prisma', name: 'prisma' };
-
-describe('normalizeFullName', () => {
-  it('前後の空白を落として小文字化する（ケース違いを同一視する）', () => {
-    expect(normalizeFullName(' Vercel/Next.js ')).toBe('vercel/next.js');
-  });
-});
 
 describe('mergeStarObservations', () => {
   it('トレンドとお気に入りの和集合を正規化して返し、fullName昇順で安定する', () => {
@@ -210,5 +210,68 @@ describe('collectStarSnapshots', () => {
     expect(snapshotCreateManyMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({ observed: 0, written: 0, trendingFailed: true });
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('恒久欠測'));
+  });
+});
+
+describe('loadStarHistories', () => {
+  /** 相場欄が読む紙面の号（= 上限日） */
+  const AS_OF_DAY = '2026-08-01';
+
+  function row(fullName: string, day: string, stars: number) {
+    return { fullName, stars, date: new Date(`${day}T00:00:00.000Z`) };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    snapshotFindManyMock.mockResolvedValue([]);
+  });
+
+  it('号を上限・7日前を下限にして、新しい順で引く', async () => {
+    await loadStarHistories(['astral-sh/ty'], AS_OF_DAY);
+
+    expect(snapshotFindManyMock).toHaveBeenCalledTimes(1);
+    expect(snapshotFindManyMock.mock.calls[0][0]).toEqual({
+      where: {
+        fullName: { in: ['astral-sh/ty'] },
+        date: {
+          gte: new Date('2026-07-25T00:00:00.000Z'),
+          lte: new Date('2026-08-01T00:00:00.000Z'),
+        },
+      },
+      select: { fullName: true, stars: true, date: true },
+      orderBy: [{ fullName: 'asc' }, { date: 'desc' }],
+    });
+  });
+
+  it('銘柄ごとに新しい2点だけを残す（3点目以降は前日比に使わない）', async () => {
+    snapshotFindManyMock.mockResolvedValue([
+      row('astral-sh/ty', '2026-08-01', 9000),
+      row('astral-sh/ty', '2026-07-31', 8700),
+      row('astral-sh/ty', '2026-07-30', 8600),
+      row('zed-industries/zed', '2026-07-30', 50),
+    ]);
+
+    const histories = await loadStarHistories(['astral-sh/ty', 'zed-industries/zed'], AS_OF_DAY);
+
+    expect(histories.get('astral-sh/ty')).toEqual([
+      { day: '2026-08-01', stars: 9000 },
+      { day: '2026-07-31', stars: 8700 },
+    ]);
+    expect(histories.get('zed-industries/zed')).toEqual([{ day: '2026-07-30', stars: 50 }]);
+  });
+
+  it('引き当てキーは保存側と同じ正規化（ケース違い・重複を畳む）', async () => {
+    await loadStarHistories(['Astral-sh/TY', 'astral-sh/ty'], AS_OF_DAY);
+
+    expect(snapshotFindManyMock.mock.calls[0][0].where.fullName).toEqual({
+      in: ['astral-sh/ty'],
+    });
+  });
+
+  it('銘柄が無ければクエリを投げない（相場欄が休載の日にDBを触らない）', async () => {
+    const histories = await loadStarHistories([], AS_OF_DAY);
+
+    expect(snapshotFindManyMock).not.toHaveBeenCalled();
+    expect(histories.size).toBe(0);
   });
 });

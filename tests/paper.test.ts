@@ -8,6 +8,7 @@ import {
   pickFrontPage,
   weatherFor,
   type LatestSignal,
+  type StarPoint,
 } from '@/lib/paper';
 
 // 紙面（Issue #31）の編集ロジック。日付規則は「常に今日の号」:
@@ -205,23 +206,170 @@ describe('listSilent', () => {
 });
 
 describe('composeMarket', () => {
-  it('星数と日割（作成からの1日平均）を組む', () => {
+  /** NOW（2026-08-02T10:00Z）の紙面の号。前日比はこの日を基準に判定する */
+  const AS_OF = paperDateFor(NOW).digestDay; // '2026-08-01'
+
+  function trending(overrides: Partial<{ full_name: string; stargazers_count: number }> = {}) {
+    return {
+      full_name: 'astral-sh/ty',
+      stargazers_count: 9000,
+      created_at: '2026-07-03T10:00:00Z', // NOWの30日前 → 日割300
+      ...overrides,
+    };
+  }
+
+  function history(points: Record<string, StarPoint[]>): Map<string, StarPoint[]> {
+    return new Map(Object.entries(points));
+  }
+
+  it('直近2観測が当日と前日なら実差分を前日比として出す', () => {
     const rows = composeMarket(
-      [
-        { full_name: 'astral-sh/ty', stargazers_count: 9000, created_at: '2026-07-03T10:00:00Z' },
-        { full_name: 'a/b', stargazers_count: 100, created_at: '2026-08-02T09:00:00Z' },
-      ],
+      [trending()],
+      history({
+        'astral-sh/ty': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-31', stars: 8700 },
+        ],
+      }),
+      AS_OF,
       NOW
     );
-    // 30日前作成・9000★ → 日割300
-    expect(rows[0]).toMatchObject({ fullName: 'astral-sh/ty', stars: 9000, perDay: 300 });
-    // 作成当日は0日割りを避けて分母1
-    expect(rows[1].perDay).toBe(100);
+    expect(rows[0]).toMatchObject({ fullName: 'astral-sh/ty', stars: 9000 });
+    expect(rows[0].delta).toEqual({ kind: 'diff', delta: 300, previousDay: true });
   });
 
-  it('created_at が無い（旧キャッシュ）場合は日割をnullにする', () => {
-    const rows = composeMarket([{ full_name: 'a/b', stargazers_count: 100 }], NOW);
-    expect(rows[0].perDay).toBeNull();
+  it('減少と変化なしも実差分として出す（捏造も切り捨てもしない）', () => {
+    const [down, flat] = composeMarket(
+      [trending({ full_name: 'a/down' }), trending({ full_name: 'a/flat' })],
+      history({
+        'a/down': [
+          { day: '2026-08-01', stars: 8700 },
+          { day: '2026-07-31', stars: 9000 },
+        ],
+        'a/flat': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-31', stars: 9000 },
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(down.delta).toEqual({ kind: 'diff', delta: -300, previousDay: true });
+    expect(flat.delta).toEqual({ kind: 'diff', delta: 0, previousDay: true });
+  });
+
+  it('欠測日を挟む場合は直近観測との差へフォールバックする（前日比とは呼ばない）', () => {
+    const rows = composeMarket(
+      [trending()],
+      history({
+        'astral-sh/ty': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-29', stars: 8500 },
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0].delta).toEqual({ kind: 'diff', delta: 500, previousDay: false });
+  });
+
+  it('当日分が未採取（最新が前日）でも直近観測比として出す', () => {
+    const rows = composeMarket(
+      [trending()],
+      history({
+        'astral-sh/ty': [
+          { day: '2026-07-31', stars: 8700 },
+          { day: '2026-07-30', stars: 8600 },
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0].delta).toEqual({ kind: 'diff', delta: 100, previousDay: false });
+  });
+
+  it('号より新しい観測は使わない（号の中で数字が動かない）', () => {
+    const rows = composeMarket(
+      [trending()],
+      history({
+        'astral-sh/ty': [
+          { day: '2026-08-02', stars: 9500 },
+          { day: '2026-08-01', stars: 9000 },
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0].delta).toEqual({ kind: 'perDay', perDay: 300 });
+  });
+
+  it('観測が1件以下の銘柄（新規トレンド・立ち上がり期間）は日割へ縮退する', () => {
+    const [single, none] = composeMarket(
+      [trending({ full_name: 'a/single' }), trending({ full_name: 'a/none' })],
+      history({ 'a/single': [{ day: '2026-08-01', stars: 9000 }] }),
+      AS_OF,
+      NOW
+    );
+    expect(single.delta).toEqual({ kind: 'perDay', perDay: 300 });
+    expect(none.delta).toEqual({ kind: 'perDay', perDay: 300 });
+  });
+
+  it('遡れるのは7日前まで。それより古い観測しか無ければ日割へ縮退する', () => {
+    const [inRange, tooOld] = composeMarket(
+      [trending({ full_name: 'a/in-range' }), trending({ full_name: 'a/too-old' })],
+      history({
+        'a/in-range': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-25', stars: 8000 }, // ちょうど7日前
+        ],
+        'a/too-old': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-24', stars: 8000 }, // 8日前
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(inRange.delta).toEqual({ kind: 'diff', delta: 1000, previousDay: false });
+    expect(tooOld.delta).toEqual({ kind: 'perDay', perDay: 300 });
+  });
+
+  it('履歴の引き当ては大小非区別（ケース違いのfullNameでも欠測にしない）', () => {
+    const rows = composeMarket(
+      [trending({ full_name: 'Astral-sh/TY' })],
+      history({
+        'astral-sh/ty': [
+          { day: '2026-08-01', stars: 9000 },
+          { day: '2026-07-31', stars: 8700 },
+        ],
+      }),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0].delta).toEqual({ kind: 'diff', delta: 300, previousDay: true });
+  });
+
+  it('created_at が無い（旧キャッシュ）銘柄は履歴も無ければ「─」に倒す', () => {
+    const rows = composeMarket(
+      [{ full_name: 'a/b', stargazers_count: 100 }],
+      new Map(),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0]).toMatchObject({ fullName: 'a/b', stars: 100, delta: { kind: 'none' } });
+  });
+
+  it('作成当日の銘柄は0日割りを避けて分母1にする', () => {
+    const rows = composeMarket(
+      [trending({ full_name: 'a/new', stargazers_count: 100 })].map((item) => ({
+        ...item,
+        created_at: '2026-08-02T09:00:00Z',
+      })),
+      new Map(),
+      AS_OF,
+      NOW
+    );
+    expect(rows[0].delta).toEqual({ kind: 'perDay', perDay: 100 });
   });
 });
 

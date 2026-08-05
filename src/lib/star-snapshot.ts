@@ -1,12 +1,14 @@
 import { digestDayOf, type DigestWindow } from '@/lib/digest-window';
 import { fetchRepository, searchTrendingRepositories } from '@/lib/github/client';
 import { settle } from '@/lib/github/concurrent';
-import { MARKET_WINDOW_DAYS } from '@/lib/paper';
+import { MARKET_DELTA_LOOKBACK_DAYS, MARKET_WINDOW_DAYS, type StarPoint } from '@/lib/paper';
 import { prisma } from '@/lib/prisma';
+import { normalizeFullName } from '@/lib/repo-key';
 
-// 星数の日次スナップショット（Issue #39）。RepoStarSnapshot への唯一の書き込み口。
+// 星数の日次スナップショット（Issue #39）。RepoStarSnapshot への唯一の読み書き口
+// （採取 = `collectStarSnapshots`、相場欄の前日比のための読み出し = `loadStarHistories`）。
 //
-// 相場欄の前日比（表示は別Issue）の材料で、AI呼び出しは無く、記録量は銘柄数にのみ比例する。
+// 相場欄の前日比（表示は Issue #40）の材料で、AI呼び出しは無く、記録量は銘柄数にのみ比例する。
 // **バックフィル不能**: 過去日の星数はGitHub APIから取得できないため、採り逃した日は永久に欠測になる。
 // #36 の「翌日の実行で自動修復する」枠組みが効かない初のデータなので、
 // 呼び出し側（runDailyDigest）は要約生成より前にこのフェーズを置く。
@@ -46,15 +48,6 @@ export type StarSnapshotResult = {
   /** トレンド検索に失敗した（= この日はトレンド銘柄が欠測になる） */
   trendingFailed: boolean;
 };
-
-/**
- * リポジトリの同一性キー。GitHubは owner/repo を大小非区別で扱うため小文字化しても情報を失わず、
- * ケース違いのお気に入り（例: "Vercel/Next.js"）が別行にならない。
- * src/lib/digest.ts の repoKeyOf・cache-key.ts の正規化と同じ規則。
- */
-export function normalizeFullName(fullName: string): string {
-  return fullName.trim().toLowerCase();
-}
 
 /**
  * 採取対象の集合を作る（純関数）。トレンドとお気に入りは重なりうるので正規化して重複排除する。
@@ -182,4 +175,43 @@ export async function collectStarSnapshots(
     writeFailed,
     trendingFailed,
   };
+}
+
+/** 相場欄の増減に必要な観測点の数（直近と、その1つ前） */
+const HISTORY_POINTS_PER_REPO = 2;
+
+/**
+ * 相場欄の増減（Issue #40）のために、銘柄ごとの直近2観測を引く。読み取り専用。
+ *
+ * - 上限は紙面の号（`asOfDay` = `PaperDate.digestDay`）: 21:00 UTC前の閲覧では当日分がまだ無く、
+ *   採取が走った後に「号より新しい観測」で前日比が組まれるのを防ぐ（号の中で数字が動かない）
+ * - 下限は `MARKET_DELTA_LOOKBACK_DAYS`: これより古い観測しか無い銘柄は表示側で日割へ縮退する。
+ *   引く行数を相場欄の行数 × 数日に抑える意味もある
+ * - キーは `normalizeFullName` 済み（保存側と同じ規則。`src/lib/repo-key.ts`）
+ */
+export async function loadStarHistories(
+  fullNames: readonly string[],
+  asOfDay: string
+): Promise<Map<string, StarPoint[]>> {
+  const histories = new Map<string, StarPoint[]>();
+  const keys = [...new Set(fullNames.map(normalizeFullName))];
+  if (keys.length === 0) return histories;
+
+  const asOf = new Date(`${asOfDay}T00:00:00.000Z`);
+  const rows = await prisma.repoStarSnapshot.findMany({
+    where: {
+      fullName: { in: keys },
+      date: { gte: new Date(asOf.getTime() - MARKET_DELTA_LOOKBACK_DAYS * DAY_MS), lte: asOf },
+    },
+    select: { fullName: true, stars: true, date: true },
+    orderBy: [{ fullName: 'asc' }, { date: 'desc' }],
+  });
+
+  for (const row of rows) {
+    const points = histories.get(row.fullName) ?? [];
+    if (points.length >= HISTORY_POINTS_PER_REPO) continue;
+    points.push({ day: row.date.toISOString().slice(0, 10), stars: row.stars });
+    histories.set(row.fullName, points);
+  }
+  return histories;
 }

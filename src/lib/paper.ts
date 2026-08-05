@@ -244,7 +244,8 @@ function marketDeltaFor(
   asOfDay: string,
   now: Date
 ): MarketDelta {
-  const [newer, older] = [...history].sort((a, b) => b.day.localeCompare(a.day));
+  // YYYY-MM-DD は辞書順＝日付順。新しい2点だけを見るので、渡す側の並びには依存しない
+  const [newer, older] = [...history].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
   if (!newer || !older) return fallbackDelta(item.stargazers_count, item.created_at, now);
 
   const newerAge = dayDiff(asOfDay, newer.day);

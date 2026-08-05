@@ -64,6 +64,10 @@ test.describe('紙面（トップ）', () => {
     await expect(marketRow('octocat/observability-dashboard-toolkit')).toContainText('▲300');
     await expect(marketRow('octocat/ferris-stream-processor')).toContainText('▼120※');
     await expect(marketRow('octocat/nolang')).toContainText('日割');
+    // 読み上げ用ラベルで「前日比」と「直近観測比」の別まで固定する。可視テキストの部分一致だけだと
+    // `▲300` は `▲300※` にもマッチするため、観測日の読み戻しが1日ずれても緑のまま通ってしまう
+    await expect(page.getByRole('cell', { name: '前日比 300増', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '直近観測比 120減', exact: true })).toBeVisible();
 
     // 天気: /rate_limit モック（4999/5000）→ 晴
     await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();

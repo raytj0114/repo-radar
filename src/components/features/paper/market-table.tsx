@@ -72,7 +72,7 @@ export function MarketTable({
                   </td>
                   <td className={styles.num}>{row.stars.toLocaleString('ja-JP')}</td>
                   <td
-                    className={`${styles.num} ${delta.up ? styles.up : ''}`.trim()}
+                    className={[styles.num, delta.up ? styles.up : null].filter(Boolean).join(' ')}
                     aria-label={delta.label}
                   >
                     {delta.text}

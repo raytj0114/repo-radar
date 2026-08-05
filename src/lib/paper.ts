@@ -1,6 +1,7 @@
 import type { DigestEntry } from '@/lib/digest';
 import { digestWindowFor } from '@/lib/digest-window';
 import { formatSilenceSpanJa, toKanjiNumber } from '@/lib/format';
+import { normalizeFullName } from '@/lib/repo-key';
 
 // 紙面（Issue #31）の編集ロジック。すべて純関数で、GitHub/DB/AIには触れない。
 // 「日刊 RepoRadar」の号は常に今日の号: 朝6:00 JST（= 窓終端21:00 UTC）に翌号へ切り替わり、
@@ -24,6 +25,14 @@ export const SILENCE_BOLD_DAYS = 365;
  * `/trending` の窓はこれとは独立: 言語フィルタを持つ別画面で、順位の深さも用途も違う
  */
 export const MARKET_WINDOW_DAYS = 30;
+
+/**
+ * 前日比が作れないときに「直近観測比」として遡ってよい日数（Issue #40）。
+ * スナップショットは**バックフィル不能**なので欠測日は永久に埋まらない。少しの欠測は
+ * 直近比で埋めるが、これより古い観測との差は日次の相場欄の数字として意味を失う（何日ぶんの
+ * 増加か読めない）ため、履歴が無い銘柄と同じ日割表示へ縮退させる。
+ */
+export const MARKET_DELTA_LOOKBACK_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -192,29 +201,85 @@ export function listSilent(latest: readonly LatestSignal[], now: Date): SilentRo
     });
 }
 
+/** 星数の観測点（`RepoStarSnapshot` の1行）。day = YYYY-MM-DD（採取窓終端のUTC日付） */
+export type StarPoint = { day: string; stars: number };
+
+/**
+ * 相場欄の増減欄。**捏造しない**ための三態（Issue #40）:
+ * - `diff`: スナップショットの実差分。`previousDay` が false なら欠測日を挟む直近観測比（表示は `※`）
+ * - `perDay`: 観測が1件以下で差分を作れない銘柄の縮退表示（作成からの1日平均★）
+ * - `none`: 日割も出せない（`created_at` が無い旧キャッシュ）
+ */
+export type MarketDelta =
+  | { kind: 'diff'; delta: number; previousDay: boolean }
+  | { kind: 'perDay'; perDay: number }
+  | { kind: 'none' };
+
 export type MarketRow = {
   fullName: string;
   href: string;
+  /** 星数はトレンド検索（レンダー時刻）の値。増減だけが朝6時の観測差である点はcaptionで断る */
   stars: number;
-  /**
-   * 日割: リポジトリ作成からの1日平均スター数（実データからの導出。前日比は履歴が無いため出さない）。
-   * created_at が無い（デプロイ跨ぎの旧キャッシュ）場合は null（表示は「─」に縮退）
-   */
-  perDay: number | null;
+  delta: MarketDelta;
 };
 
-/** 相場欄: トレンド検索の結果を星数と日割で組む。createdAtはISO 8601 */
+/** YYYY-MM-DD 同士の日数差（a − b） */
+function dayDiff(a: string, b: string): number {
+  return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS);
+}
+
+/** 履歴が使えない銘柄の縮退。日割が出せなければ `none`（「─」表示） */
+function fallbackDelta(stars: number, createdAt: string | undefined, now: Date): MarketDelta {
+  if (!createdAt) return { kind: 'none' };
+  return { kind: 'perDay', perDay: Math.round(stars / Math.max(1, daysSince(createdAt, now))) };
+}
+
+/**
+ * 1銘柄の増減。直近2観測が「紙面の号（asOfDay）から遡って観測窓内」に収まっているときだけ実差分を出す。
+ * 観測は順不同で渡してよい（新しい2点を自分で選ぶ）
+ */
+function marketDeltaFor(
+  item: { stargazers_count: number; created_at?: string },
+  history: readonly StarPoint[],
+  asOfDay: string,
+  now: Date
+): MarketDelta {
+  const [newer, older] = [...history].sort((a, b) => b.day.localeCompare(a.day));
+  if (!newer || !older) return fallbackDelta(item.stargazers_count, item.created_at, now);
+
+  const newerAge = dayDiff(asOfDay, newer.day);
+  const olderAge = dayDiff(asOfDay, older.day);
+  // 号より新しい観測は混ぜない（21:00 UTC前の閲覧で当日分がまだ無い状態と区別できなくなる）
+  const usable = newerAge >= 0 && olderAge <= MARKET_DELTA_LOOKBACK_DAYS && olderAge > newerAge;
+  if (!usable) return fallbackDelta(item.stargazers_count, item.created_at, now);
+
+  return {
+    kind: 'diff',
+    delta: newer.stars - older.stars,
+    previousDay: newerAge === 0 && olderAge === 1,
+  };
+}
+
+/**
+ * 相場欄: トレンド検索の結果に星数スナップショットの実差分を突き合わせる。
+ * `historyByFullName` のキーは `normalizeFullName` 済み、`asOfDay` は紙面の号（`PaperDate.digestDay`）
+ */
 export function composeMarket(
   items: readonly { full_name: string; stargazers_count: number; created_at?: string }[],
+  historyByFullName: ReadonlyMap<string, readonly StarPoint[]>,
+  asOfDay: string,
   now: Date
 ): MarketRow[] {
   return items.map((item) => ({
     fullName: item.full_name,
     href: `/repos/${item.full_name}`,
     stars: item.stargazers_count,
-    perDay: item.created_at
-      ? Math.round(item.stargazers_count / Math.max(1, daysSince(item.created_at, now)))
-      : null,
+    delta: marketDeltaFor(
+      item,
+      historyByFullName.get(normalizeFullName(item.full_name)) ?? [],
+      asOfDay,
+      now
+    ),
   }));
 }
 

@@ -49,7 +49,8 @@ src/
 │   ├── prisma.ts
 │   ├── digest.ts            # 朝刊の組み立て（cron本体・entriesスキーマ）
 │   ├── digest-window.ts     # 収集窓の純関数（prisma/env非依存。E2Eからも直接import）
-│   ├── star-snapshot.ts     # 星数の日次スナップショット採取（cron相乗り。RepoStarSnapshotの唯一の書き込み口）
+│   ├── star-snapshot.ts     # 星数の日次スナップショット（cron相乗りの採取と相場欄向けの読み出し。RepoStarSnapshotの唯一の口）
+│   ├── repo-key.ts          # owner/repo の同一性キー（純関数。保存側と表示側で共有）
 │   ├── paper.ts             # 紙面の編集ロジック（純関数のみ）
 │   ├── radio.ts             # 放送原稿の編集ロジック（純関数のみ。受信機UIからもimportする）
 │   ├── latest-signals.ts    # お気に入りの最新リリース取得（紙面と深夜放送の共通の取得口）
@@ -168,6 +169,18 @@ Next.js サーバー
 - 縮退方針: **紙面は落ちない**。欄単位で休載・観測休止の枠に倒す（エラー境界へ全面では
   倒さない）。レート枠はプール別（core=短信・沈黙 / search=相場、天気はゲート外）なので
   縮退も欄別に起きる
+- 相場欄の前日比（Issue #40、`composeMarket` + `loadStarHistories`）:
+  - 数字の出所は `RepoStarSnapshot` の**実差分のみ**。差分が作れない銘柄に前日比風の数字は出さない
+  - 基準日は紙面の号（`PaperDate.digestDay`）。号より新しい観測は使わないので、
+    21:00 UTC の採取が走っても閲覧中の号の数字は動かない
+  - 二段の縮退: 直近2観測が「当日と前日」でなければ `※` 付きの**直近観測比**、
+    観測が1件以下（立ち上がり期間・新規トレンド銘柄）なら**日割**、`created_at` も無ければ「─」。
+    遡れるのは `MARKET_DELTA_LOOKBACK_DAYS`（7日）まで（スナップショットはバックフィル不能で
+    欠測が永久に残るため、古すぎる差は日次の数字として意味を失う）
+  - 星数の列はトレンド検索（レンダー時刻）の値のまま。増減だけが朝6時の観測差であることは caption で断る
+  - 履歴の引き当ては `src/lib/repo-key.ts` の `normalizeFullName`（採取側と**同じ1関数**。
+    規則がずれると前日比が静かに欠ける）
+  - スナップショットの読み取りに失敗しても相場欄は落とさない（全銘柄が日割へ縮退する）
 
 深夜放送「JORR」（Issue #32、`/radio` = `src/app/(main)/radio/page.tsx`）:
 

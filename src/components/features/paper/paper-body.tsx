@@ -16,8 +16,10 @@ import {
   MARKET_WINDOW_DAYS,
   type MarketRow,
   type PaperDate,
+  type StarPoint,
 } from '@/lib/paper';
 import { prisma } from '@/lib/prisma';
+import { loadStarHistories } from '@/lib/star-snapshot';
 import { BriefList } from './brief-list';
 import { LeadArticle, LeadHoliday, SecondArticle } from './lead-article';
 import { MarketTable } from './market-table';
@@ -65,9 +67,20 @@ export async function PaperBody({ userId, paper }: { userId: string; paper: Pape
   const entries = digestRow ? parseEntries(digestRow.entries) : [];
   const { lead, second, featuredRepoKeys } = pickFrontPage(entries);
 
+  const trendingItems = marketSettled.status === 'fulfilled' ? marketSettled.value.items : [];
+
   // お気に入り全銘柄の最新信号（旧タイムラインの取得を吸収。1リポジトリ1リクエスト）。
-  // 深夜放送（/radio）の気象通報と同じ取得口を使い、fetchキャッシュを共有する
-  const { signals, rateLimited, failedCount } = await loadLatestSignals(favorites);
+  // 深夜放送（/radio）の気象通報と同じ取得口を使い、fetchキャッシュを共有する。
+  // 星数の履歴（相場欄の前日比。Issue #40）はDBのみを見るので、GitHub取得と一緒に待つ
+  const [{ signals, rateLimited, failedCount }, historiesSettled] = await Promise.all([
+    loadLatestSignals(favorites),
+    settle(
+      loadStarHistories(
+        trendingItems.map((item) => item.full_name),
+        paper.digestDay
+      )
+    ),
+  ]);
 
   // 短信の1行目に使う共有要約（キャッシュの読み取りのみ。ここからAI生成は絶対に発火させない）
   const summaryKeys = signals.map((signal) =>
@@ -92,11 +105,19 @@ export async function PaperBody({ userId, paper }: { userId: string; paper: Pape
   const briefs = composeBriefs(signalsWithSummary, featuredRepoKeys, now);
   const silent = listSilent(signalsWithSummary, now);
 
+  // 星数の履歴が引けなくても相場欄は落とさない（全銘柄が日割へ縮退する。捏造はしない）
+  let histories: Map<string, StarPoint[]> = new Map();
+  if (historiesSettled.status === 'fulfilled') {
+    histories = historiesSettled.value;
+  } else {
+    console.error('[paper] star snapshot query failed:', historiesSettled.reason);
+  }
+
   // 相場（searchプール）: レート上限はその旨を報じ、他の失敗はデータリンク不通として休載
   let market: MarketRow[] | null = null;
   let marketRateLimited = false;
   if (marketSettled.status === 'fulfilled') {
-    market = composeMarket(marketSettled.value.items, now);
+    market = composeMarket(trendingItems, histories, paper.digestDay, now);
   } else if (marketSettled.reason instanceof GitHubRateLimitError) {
     marketRateLimited = true;
   } else {

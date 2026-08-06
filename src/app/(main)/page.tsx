@@ -17,7 +17,12 @@ export const metadata: Metadata = {
 /**
  * 一面（Issue #31）: docs/mocks/02-broadsheet.html を実装した新聞紙面。
  * 題字・日付行・奥付（同期計算のみ）をシェルとして即時送出し、
- * GitHub/DBに触れる本文はSuspense境界の内側で後追いストリーミングする（Issue #5 の構造を継承）
+ * GitHub/DBに触れる本文はSuspense境界の内側で後追いストリーミングする（Issue #5 の構造を継承）。
+ *
+ * ここでストリーミングしてよいのは、この面が**同一ページのServer Actionを持たない**ため
+ * （ログアウトは遷移する）。境界と同一ページactionが同居すると、action応答がクライアントへ
+ * 届かずUIがpendingで固まる（Issue #47 の実測。`docs/ARCHITECTURE.md` のレンダリング制約）。
+ * この面に操作を足すときは、その制約に触れないか必ず確かめること
  */
 export default async function FrontPage() {
   const session = await auth();

@@ -34,13 +34,18 @@ function queryStateOf(q: string | string[] | undefined): QueryState {
  *
  * 一面と違い、本文を**Suspenseでストリーミングしない**（意図的な設計判断）:
  * この面は同一ページのServer Action（購読・解約・取り込み）で毎回再レンダーされるが、
- * `next start` 環境（=E2E）ではSuspense境界があるとaction応答が完了せず
- * クライアントが更新を受け取れない事象が決定的に再現した（Suspenseを外すと6/6成功）。
- * ただし因果の帰属は未確定で、上流には輸送層（HTTP/1.1の接続数上限）要因を示す報告がある
- * （vercel/next.js #96109 / #95714。**HTTP/2のVercel本番では起きない可能性**）。
- * Suspense撤去はE2E決定性のための対処であり、既定表示（q/starなし）の本文は
- * DB1クエリのみ＝GitHub呼び出しゼロなのでブロッキングレンダーでも体感は変わらない。
- * #41で全画面へ一般化する前にVercelプレビューでの実測が必要（メモリ・チップ起票済み）
+ * Suspense境界があるとaction応答がクライアントへ届かず、サーバー側は書き込み済みなのに
+ * UIだけが `useTransition` のpendingで固まる（Next 16.2.10）。
+ *
+ * Issue #47 で同一ビルドに対し 画面の形状 × 輸送層 を各20試行（計240試行）実測した。
+ * この面については:
+ * - Suspenseで包まない版: **60/60成功**（HTTP/1.1・TLS+HTTP/1.1・HTTP/2 のいずれでも）
+ * - 包んだ版: HTTP/1.1 **4/20**、TLS+HTTP/1.1 **5/20**、HTTP/2 **19/20**
+ * 輸送層は強い修飾要因だが**HTTP/2でも消えない**ので、戻す理由がない。
+ * 表と他画面の結果、判断の根拠は `docs/ARCHITECTURE.md` の「レンダリング制約」を見ること
+ *
+ * 既定表示（q/starなし）の本文はDB1クエリのみ＝GitHub呼び出しゼロなので、
+ * ブロッキングレンダーでも体感は変わらない（`?star=1` で重くしても 60/60 通ることは実測済み）
  */
 export default async function FavoritesPage({
   searchParams,

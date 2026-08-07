@@ -32,6 +32,12 @@ describe('buildReleaseSummaryPrompt', () => {
     expect(prompt).toContain('敬体（です・ます）は使わない');
   });
 
+  it('紙面はマークダウンを解釈しないため、コード記法などの記法を禁じる', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('マークダウン記法は使わず');
+    expect(prompt).toContain('バッククォート');
+  });
+
   it('見出しに読点区切りの新聞構文と例を指示する（第3版）', () => {
     const prompt = buildReleaseSummaryPrompt(base);
     expect(prompt).toContain('「〈主語となる固有名詞〉、〈動詞句の体言止め〉」');

@@ -103,7 +103,7 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   // 後から本来の位置へ移動する。移動前は要素の矩形が0になるため、goto直後に測ると
   // 溢れているページでも scrollWidth === clientWidth になり見逃す（実測で確認済み）。
   // `main` が可視になった時点＝コンテンツが本来の位置に置かれた時点で測る。
-  // loading.tsx のフォールバックは main を持たないため、これはスケルトンにはマッチしない
+  // 紙面のスケルトン（`PaperBodySkeleton`）は main の内側なので、これだけでは待ち切れない
   await expect(page.locator('main')).toBeVisible();
   // ページ内Suspense（ダッシュボードのタイムライン等）はシェルより後に届く。
   // スケルトンが残っている時点で測ると本来のコンテンツの溢れを見逃すため、

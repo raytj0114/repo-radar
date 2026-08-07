@@ -37,6 +37,8 @@ describe('buildReleaseSummaryPrompt', () => {
     expect(prompt).toContain('「〈主語となる固有名詞〉、〈動詞句の体言止め〉」');
     expect(prompt).toContain('20字程度');
     expect(prompt).toContain('リポジトリ名ではなく');
+    expect(prompt).toContain('リポジトリ名・製品名・バージョン番号は見出しに入れない');
+    expect(prompt).toContain('修正中心のリリースでは、対象領域を主語に');
     expect(prompt).toContain('「Turbopackキャッシュ、既定を反転」');
     expect(prompt).toContain('「TypedSQL、複数スキーマへ」');
   });
@@ -52,6 +54,7 @@ describe('buildReleaseSummaryPrompt', () => {
     expect(prompt).toContain('最終行: 事実の繰り返しではなく解釈');
     expect(prompt).toContain('開発者に何を意味するか');
     expect(prompt).toContain('リリースノートから読み取れる範囲');
+    expect(prompt).toContain('一般論');
   });
 
   it('破壊的変更の判定基準を明示する', () => {

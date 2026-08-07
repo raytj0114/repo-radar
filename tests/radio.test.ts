@@ -91,6 +91,20 @@ describe('読み下しの正規化', () => {
     expect(toSpokenSummary('   ')).toBe('');
   });
 
+  it('句点終わりの完全文（プロンプト第3版）を渡しても句点が重複しない（冪等）', () => {
+    const structured = [
+      '・Turbopackキャッシュの既定を反転した。',
+      '・PPRが安定版に昇格した．',
+      '・この慎重さに16系の設計思想が見える。',
+    ].join('\n');
+    const spoken = toSpokenSummary(structured);
+    expect(spoken).toBe(
+      'Turbopackキャッシュの既定を反転した。PPRが安定版に昇格した。この慎重さに16系の設計思想が見える。'
+    );
+    // 一度読み下した原稿をもう一度通しても変わらない
+    expect(toSpokenSummary(spoken)).toBe(spoken);
+  });
+
   it('沈黙期間の「箇月」は読み違えられないよう「か月」にする', () => {
     expect(toSpokenSpan('十箇月')).toBe('十か月');
     expect(toSpokenSpan('一年三箇月')).toBe('一年三か月');

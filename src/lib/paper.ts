@@ -132,7 +132,7 @@ export type BriefLine = {
   /** 短信は紙幅が狭いのでリポジトリ名のみ（owner略） */
   repoName: string;
   href: string;
-  /** 要約の1行目 or 「vX.Y.Z が着信」 */
+  /** 要約の1行目（行頭の「・」と末尾の句点を落とした断片） or 「vX.Y.Z が着信」 */
   text: string;
   /** 本日 / 昨日 / N日前（漢数字） */
   whenLabel: string;
@@ -147,7 +147,9 @@ function whenLabelOf(days: number): string {
 
 /**
  * 短信欄: 一面・二番手で扱った銘柄を除き、最新リリースが60日以内のものを新しい順に。
- * 行の本文は共有要約の1行目（行頭の「・」は落とす）、無ければ着信のみ報じる
+ * 行の本文は共有要約の1行目。短信は断片の欄なので、行頭の「・」と末尾の句点は落として採字する
+ * （promptVersion 3 以降の要約は句点で終わる完全文のため、残すと「〜した。（二日前）」と衝突する）。
+ * 要約が無ければ着信のみ報じる
  */
 export function composeBriefs(
   latest: readonly LatestSignal[],
@@ -166,7 +168,7 @@ export function composeBriefs(
       repoName: signal.name,
       href: `/repos/${signal.owner}/${signal.name}`,
       text: signal.summaryFirstLine
-        ? signal.summaryFirstLine.replace(/^・/, '')
+        ? signal.summaryFirstLine.replace(/^・/, '').replace(/[。．]+$/, '')
         : `${signal.tagName} が着信`,
       whenLabel: whenLabelOf(daysSince(signal.publishedAt, now)),
       publishedAt: signal.publishedAt,

@@ -152,6 +152,28 @@ describe('composeBriefs', () => {
     expect(briefs[1].text).toBe('v7.2.0 が着信');
   });
 
+  it('完全文の要約（プロンプト第3版）は末尾の句点を落とし、句点+括弧の衝突を避ける', () => {
+    const sentence = signal({ summaryFirstLine: '・Turbopackキャッシュの既定を反転した。' });
+    const fullWidthStop = signal({
+      owner: 'prisma',
+      name: 'prisma',
+      fullName: 'prisma/prisma',
+      summaryFirstLine: 'TypedSQLが複数スキーマに対応した．',
+    });
+    const exclamation = signal({
+      owner: 'expressjs',
+      name: 'express',
+      fullName: 'expressjs/express',
+      summaryFirstLine: '・十年ぶりのメジャーが来た！',
+    });
+    const briefs = composeBriefs([sentence, fullWidthStop, exclamation], new Set(), NOW);
+    expect(briefs.map((line) => line.text)).toEqual([
+      'Turbopackキャッシュの既定を反転した',
+      'TypedSQLが複数スキーマに対応した',
+      '十年ぶりのメジャーが来た！',
+    ]);
+  });
+
   it('日付ラベルは 本日 / 昨日 / N日前（漢数字）', () => {
     const today = signal({ publishedAt: '2026-08-02T01:00:00Z' });
     const yesterday = signal({

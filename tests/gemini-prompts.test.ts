@@ -26,6 +26,37 @@ describe('buildReleaseSummaryPrompt', () => {
     expect(prompt).toContain('hasBreaking');
   });
 
+  it('常体の新聞文体を指示し敬体を禁じる（第3版）', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('常体（だ・である）');
+    expect(prompt).toContain('敬体（です・ます）は使わない');
+  });
+
+  it('見出しに読点区切りの新聞構文と例を指示する（第3版）', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('「〈主語となる固有名詞〉、〈動詞句の体言止め〉」');
+    expect(prompt).toContain('20字程度');
+    expect(prompt).toContain('リポジトリ名ではなく');
+    expect(prompt).toContain('リポジトリ名・製品名・バージョン番号は見出しに入れない');
+    expect(prompt).toContain('修正中心のリリースでは、対象領域を主語に');
+    expect(prompt).toContain('「Turbopackキャッシュ、既定を反転」');
+    expect(prompt).toContain('「TypedSQL、複数スキーマへ」');
+  });
+
+  it('lines に句点終わりの完全文と行長の目安を指示する（第3版）', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('句点「。」で終わる完全な一文');
+    expect(prompt).toContain('60字程度');
+  });
+
+  it('lines の最終行に事実でなく解釈を指示する（第3版）', () => {
+    const prompt = buildReleaseSummaryPrompt(base);
+    expect(prompt).toContain('最終行: 事実の繰り返しではなく解釈');
+    expect(prompt).toContain('開発者に何を意味するか');
+    expect(prompt).toContain('リリースノートから読み取れる範囲');
+    expect(prompt).toContain('一般論');
+  });
+
   it('破壊的変更の判定基準を明示する', () => {
     const prompt = buildReleaseSummaryPrompt(base);
     expect(prompt).toContain('hasBreaking を true にする変更の例');

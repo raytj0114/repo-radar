@@ -16,6 +16,11 @@ const envSchema = z.object({
   AUTH_GITHUB_ID: z.string().min(1),
   AUTH_GITHUB_SECRET: z.string().min(1),
 
+  // 任意。OAuthの折り返しを本番ドメインへ集約するリダイレクトプロキシ（Auth.js v5）。
+  // URLごとにドメインが変わるプレビューデプロイでログインを成立させるためのもので、
+  // 設定するのはVercelのPreviewスコープのみ（docs/ARCHITECTURE.md「プレビュー環境（認証とDB）」）
+  AUTH_REDIRECT_PROXY_URL: z.string().url().optional(),
+
   // Gemini API
   GOOGLE_GEMINI_API_KEY: z.string().min(1),
 

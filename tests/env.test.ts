@@ -24,6 +24,8 @@ describe('env', () => {
     for (const key of [...Object.keys(VALID_ENV), 'SKIP_ENV_VALIDATION']) {
       vi.stubEnv(key, '');
     }
+    // 任意変数は「空文字」ではなく「未設定」が既定。空文字だとURL検証に落ちてしまう
+    vi.stubEnv('AUTH_REDIRECT_PROXY_URL', undefined);
   });
 
   afterEach(() => {
@@ -56,6 +58,24 @@ describe('env', () => {
     vi.stubEnv('DATABASE_URL', 'not-a-url');
     const env = await importEnv();
     expect(() => env.DATABASE_URL).toThrowError(/DATABASE_URL/);
+  });
+
+  it('AUTH_REDIRECT_PROXY_URL は任意（未設定でも他の変数を読める）', async () => {
+    for (const [key, value] of Object.entries(VALID_ENV)) {
+      vi.stubEnv(key, value);
+    }
+    const env = await importEnv();
+    expect(env.AUTH_REDIRECT_PROXY_URL).toBeUndefined();
+    expect(env.AUTH_SECRET).toBe(VALID_ENV.AUTH_SECRET);
+  });
+
+  it('AUTH_REDIRECT_PROXY_URL がURL形式でない場合はエラーになる', async () => {
+    for (const [key, value] of Object.entries(VALID_ENV)) {
+      vi.stubEnv(key, value);
+    }
+    vi.stubEnv('AUTH_REDIRECT_PROXY_URL', 'not-a-url');
+    const env = await importEnv();
+    expect(() => env.AUTH_REDIRECT_PROXY_URL).toThrowError(/AUTH_REDIRECT_PROXY_URL/);
   });
 
   it('SKIP_ENV_VALIDATION=true のときは検証せず生の値を返す（CIビルド用）', async () => {

@@ -162,6 +162,12 @@ Next.js サーバー
   数本生成し文体契約を機械チェック。**DBには書かない**ためキャッシュを汚さず、同一リリースで
   文面を変えて比較する反復ができる——画面からの生成はキャッシュファースト＋再生成フラグ禁止
   （不変条件2）のため、この反復には構造的に使えない）
+- **検証法の役割分担**（プロンプトに触るPRは両方を通す）:
+
+  | 場面                 | 手段                                | 見えるもの / 見えないもの                                                 |
+  | -------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+  | プロンプトの反復開発 | サンプラ（上記）                    | 文面と文体契約が見える。**紙面での見え方は見えない**                      |
+  | マージ前の最終目視   | プレビューデプロイ（→「デプロイ」） | 実UI・組版・375px・ストリーミングが見える。preview DBに書くので本番は無傷 |
 
 紙面「日刊 RepoRadar」（Issue #31、`/` = `src/app/(main)/page.tsx`）:
 
@@ -326,6 +332,10 @@ Suspense境界を置かない。`loading.tsx` によるルート境界も同じ�
 - Server Actionは冒頭で `await auth()` を検証。未認証は即エラー
 - 公開エンドポイント一覧（ここに無いものは全て認証必須）:
   - `GET/POST /api/auth/*` （Auth.js。CSRF検証はAuth.js内蔵）
+    - `AUTH_REDIRECT_PROXY_URL` が自ドメインを指すとき、本番の `/api/auth/callback/*` は
+      `state` に含まれる origin へ折り返す**中継**も兼ねる（→「プレビュー環境（認証とDB）」）。
+      state は `AUTH_SECRET` で署名・暗号化されており、**復号できない state は折り返さない**ため、
+      任意のURLへリダイレクトさせる踏み台にはならない
   - `/login` のsignIn Server Action（GitHub OAuthへのリダイレクトのみ。実処理はAuth.js側）
   - `signOutAction`（`src/app/actions/auth.ts`。ヘッダーと紙面奥付で共有。自セッションの破棄のみで副作用なし）
   - `GET /api/cron/digest` （`Authorization: Bearer ${CRON_SECRET}` を検証）
@@ -452,6 +462,59 @@ ownerは実行ごとに一意にする（Nextのfetchキャッシュに当たる
 - マイグレーション: GitHub Actions `migrate.yml` が main への push 時に
   `prisma migrate deploy` を実行（`DIRECT_URL` を使用）
 - Cron: Vercel Cron → `/api/cron/digest`（`vercel.json` で定義、Phase 5で追加）
+
+### プレビュー環境（認証とDB）
+
+プレビューデプロイのURLはPRごとに変わるため、GitHub OAuth Appのコールバックには登録できない。
+そのため以前は**プレビューで認証必須画面に到達できず**、紙面の実際の見え方をマージ前に
+確認する手段が無かった（Issue #40 で判明、#54 で解消）。
+
+**認証**: Auth.js v5 のリダイレクトプロキシ（`AUTH_REDIRECT_PROXY_URL`）を使う。
+OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番の `/api/auth` が折り返しを代行する。
+
+| 側         | `isOnRedirectProxy`   | 挙動                                                                                                                   |
+| ---------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| プレビュー | false（origin不一致） | `redirect_uri` をプロキシURLへ差し替え、自分のコールバックURLを `state.origin` に載せる                                |
+| 本番       | true（origin一致）    | 受けた `state` を復号し、origin が自分と違えばそこへ折り返す。自分のログインは `state.origin` を載せないので従来どおり |
+
+判定は `new URL(redirectProxyUrl).origin === リクエストのorigin` の一致だけで行われる
+（`@auth/core/lib/init.ts`）。つまり**折り返す側（本番）にも同じ環境変数が要る**点に注意する。
+`trustHost` は Vercel 上では `VERCEL` 環境変数から自動でtrueになるため、コードでの指定は不要。
+
+**DB**: プレビューの `DATABASE_URL` / `DIRECT_URL` は固定の**preview専用Supabaseプロジェクト**を指す。
+未マージのコード・プロンプトがTTL無しの本番キャッシュへ書く経路を塞ぎ、`promptVersion` が刻む
+世代の純度を守るため（→「AIコスト設計」）。
+
+#### 設定手順（Vercel / Supabase ダッシュボード）
+
+1. Supabase で preview 用プロジェクトを新規作成（無料枠）
+2. Vercel → Settings → Environment Variables に **Preview スコープで**設定する
+   - `AUTH_REDIRECT_PROXY_URL` = `https://repo-radar-sigma.vercel.app/api/auth`
+   - `DATABASE_URL` = preview Supabase の Transaction Pooler（6543）
+   - `DIRECT_URL` = preview Supabase の Direct（5432）。`migrate deploy` が使うため必須
+
+   > 上表のとおり `AUTH_REDIRECT_PROXY_URL` は**折り返す側（Production スコープ）にも必要**と
+   > 読める。まず Preview のみで実機確認し、`InvalidCheck` 系で失敗するようなら Production にも
+   > 同じ値を足してRedeployする（この節は実機結果が出た時点で確定形に書き換えること）。
+
+3. `AUTH_SECRET` が Production と Preview で**同一値**であることを確認する。
+   プレビューが署名した `state` を本番が復号する構図のため、分かれていると静かに失敗する
+4. `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` も Production と**同一値**であることを確認する。
+   プレビューの認可リクエストは `redirect_uri` に本番コールバックを載せて飛ぶので、
+   ローカル用（localhostコールバック）の別OAuth Appの値が入っていると GitHub 側で弾かれる
+5. `AUTH_URL` は Preview スコープに設定しない。リクエストURLを上書きしてorigin判定を壊す
+6. preview DB の初期化: preview の `DIRECT_URL` を指して `npx prisma migrate deploy` を
+   ローカルから一括適用する。以後は**スキーマ変更を含むPRのときだけ**同じコマンドを当てる
+   （CI化は必要になってから）
+7. **環境変数の追加・変更は実行中のデプロイには反映されない。**
+   対象環境をRedeploy（コード変更は不要）して初めて効く
+
+#### 既知の制約
+
+- Vercel Cron は production でのみ走るため、preview DBに朝刊は自動生成されない（紙面は休載表示）
+- 固定preview DBはPR間でスキーマを共有する。並行するスキーマ変更PRが常態化したら
+  Supabase Branching（Proプラン・PRごとに隔離DB）へ移行する
+- Deployment Protection が Preview に掛かっていると、preview URL への到達自体が阻まれる
 
 ### 必須チェック（ブランチ保護）
 

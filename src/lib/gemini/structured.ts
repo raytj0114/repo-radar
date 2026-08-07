@@ -5,8 +5,8 @@ import type { GenerationValidation } from '@/lib/gemini/client';
 // 純粋関数のみ。Gemini呼び出し回数を増やさずに構造を得るため、
 // 検証失敗時は client.ts の既存リトライ枠の内側で再試行され、最後はテキストのみへ縮退する。
 
-/** プロンプト世代。1 = 構造化以前のプレーンテキスト3行 / 2 = 構造化JSON */
-export const RELEASE_SUMMARY_PROMPT_VERSION = 2;
+/** プロンプト世代。1 = 構造化以前のプレーンテキスト3行 / 2 = 構造化JSON / 3 = 新聞常体（読点区切りの見出し・最終行は解釈） */
+export const RELEASE_SUMMARY_PROMPT_VERSION = 3;
 
 /** 要点の行数。プロンプト・responseSchema・Zod検証で同じ値を使う */
 export const SUMMARY_LINE_COUNT = 3;

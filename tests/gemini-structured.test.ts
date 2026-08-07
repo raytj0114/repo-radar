@@ -93,7 +93,7 @@ describe('releaseSummaryResponseSchema', () => {
     expect(releaseSummaryResponseSchema.properties.lines.maxItems).toBe(SUMMARY_LINE_COUNT);
   });
 
-  it('構造化のプロンプト世代は既存行（1）と区別できる', () => {
-    expect(RELEASE_SUMMARY_PROMPT_VERSION).toBeGreaterThan(1);
+  it('プロンプト世代は第3版（新聞常体）。世代交代はこのテストの更新を伴う意図的な変更にする', () => {
+    expect(RELEASE_SUMMARY_PROMPT_VERSION).toBe(3);
   });
 });

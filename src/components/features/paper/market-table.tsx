@@ -48,41 +48,48 @@ export function MarketTable({
     <div>
       <span className={styles.kanban}>相場</span>
       {rows && rows.length > 0 ? (
-        <table className={styles.chart}>
-          <caption>
-            スター相場（新興・観測三十日）前日比は朝六時の観測差、※は欠測を挟む直近観測比、日割は作成からの一日平均
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">銘柄</th>
-              <th scope="col" className={styles.num}>
-                星数
-              </th>
-              <th scope="col" className={styles.num}>
-                前日比
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const delta = deltaViewOf(row.delta);
-              return (
-                <tr key={row.fullName}>
-                  <td>
-                    <Link href={row.href}>{row.fullName}</Link>
-                  </td>
-                  <td className={styles.num}>{row.stars.toLocaleString('ja-JP')}</td>
-                  <td
-                    className={[styles.num, delta.up ? styles.up : null].filter(Boolean).join(' ')}
-                    aria-label={delta.label}
-                  >
-                    {delta.text}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <>
+          <table className={styles.chart}>
+            <caption>
+              スター相場（新興・観測三十日）前日比は朝六時の観測差、※は欠測を挟む直近観測比、日割は作成からの一日平均
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">銘柄</th>
+                <th scope="col" className={styles.num}>
+                  星数
+                </th>
+                <th scope="col" className={styles.num}>
+                  前日比
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const delta = deltaViewOf(row.delta);
+                return (
+                  <tr key={row.fullName}>
+                    <td>
+                      <Link href={row.href}>{row.fullName}</Link>
+                    </td>
+                    <td className={styles.num}>{row.stars.toLocaleString('ja-JP')}</td>
+                    <td
+                      className={[styles.num, delta.up ? styles.up : null]
+                        .filter(Boolean)
+                        .join(' ')}
+                      aria-label={delta.label}
+                    >
+                      {delta.text}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className={styles.nextNote}>
+            <Link href="/trending">（全表はトレンド面に）</Link>
+          </p>
+        </>
       ) : (
         <p className={styles.kyusai}>
           {rateLimited ? '検索枠の上限につき本日は休載。' : 'データリンク不通につき休載。'}

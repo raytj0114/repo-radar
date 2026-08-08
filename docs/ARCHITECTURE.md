@@ -502,10 +502,27 @@ OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番
 4. `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` も Production と**同一値**であることを確認する。
    プレビューの認可リクエストは `redirect_uri` に本番コールバックを載せて飛ぶので、
    ローカル用（localhostコールバック）の別OAuth Appの値が入っていると GitHub 側で弾かれる
-5. `AUTH_URL` は Preview スコープに設定しない。リクエストURLを上書きしてorigin判定を壊す
-6. preview DB の初期化: preview の `DIRECT_URL` を指して `npx prisma migrate deploy` を
-   ローカルから一括適用する。以後は**スキーマ変更を含むPRのときだけ**同じコマンドを当てる
-   （CI化は必要になってから）
+5. `AUTH_URL`（および旧名 `NEXTAUTH_URL`）が Preview スコープに**無い**ことを確認する。
+   この2つは `env.ts` を通らず Auth.js が `process.env` から直接読む変数で
+   （`next-auth/lib/env.js` の `reqWithEnvURL`）、リクエストURLを丸ごと上書きするため
+   プレビューのorigin判定が壊れる。リポジトリ側には存在しないので、確認先はVercelのみ
+6. preview DB の初期化: **ローカルのリポジトリルートから**、preview Supabase の
+   Direct接続（5432）を指して一括適用する。`.env` は書き換えず、そのコマンドにだけ渡す
+   （書き換えると開発DBの向き先が変わり、戻し忘れが事故になる）:
+
+   ```powershell
+   # 別のPowerShellウィンドウで実行する（$env: はセッションに残るため）
+   $env:DATABASE_URL='<preview Supabase の Direct 5432 接続文字列>'
+   $env:DIRECT_URL=$env:DATABASE_URL
+   npx prisma migrate status   # 接続先と未適用の件数を目視してから
+   npx prisma migrate deploy
+   ```
+
+   `migrate deploy` が使うのは `directUrl` だが、`prisma/schema.prisma` の datasource が
+   `url` も解決するため両方に値が要る。本番も同じ形（`migrate.yml` は `DATABASE_URL` /
+   `DIRECT_URL` の両方に `PROD_DIRECT_URL` を渡している）。
+   以後は**スキーマ変更を含むPRのときだけ**同じ手順を当てる（CI化は必要になってから）
+
 7. **環境変数の追加・変更は実行中のデプロイには反映されない。**
    対象環境をRedeploy（コード変更は不要）して初めて効く
 

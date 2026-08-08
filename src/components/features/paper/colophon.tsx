@@ -41,9 +41,7 @@ export function Colophon({
             <span aria-hidden="true">｜</span>
           </Fragment>
         ))}
-        {/* 深夜放送への暫定導線。Issue #41 で紙面に「ラテ欄」を組み、そちらへ移す */}
-        <Link href="/radio">深夜放送</Link>
-        <span aria-hidden="true">｜</span>
+        {/* 深夜放送への導線は一面のラテ欄（radio-guide.tsx）が持つ（Issue #41で移設） */}
         <form action={signOutAction}>
           <button type="submit" className={styles.linkButton}>
             退勤（ログアウト）

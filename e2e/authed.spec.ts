@@ -73,12 +73,24 @@ test.describe('紙面（トップ）', () => {
     await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
     await expect(page.getByText('晴', { exact: true })).toBeVisible();
 
+    // ラテ欄（Issue #41）: JORR の番組表と、世界観の内側に置いた /radio への導線
+    await expect(page.getByText('JORR 本日の放送')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'レポレーダー第一' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /受信機を合わせる/ })).toHaveAttribute(
+      'href',
+      '/radio'
+    );
+
     // 奥付: 紙面内ナビ（ヘッダーの代替）とログアウト
-    await expect(page.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
-    // 購読面への導線（Issue #42。#41 で置き場を整理する）
-    await expect(page.getByRole('link', { name: '購読面' })).toHaveAttribute('href', '/favorites');
-    // 深夜放送への導線（Issue #32。#41 でラテ欄へ移す）
-    await expect(page.getByRole('link', { name: '深夜放送' })).toHaveAttribute('href', '/radio');
+    const colophonNav = page.getByRole('navigation', { name: '紙面案内' });
+    await expect(colophonNav.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
+    // 購読面への導線（Issue #42）
+    await expect(colophonNav.getByRole('link', { name: '購読面' })).toHaveAttribute(
+      'href',
+      '/favorites'
+    );
+    // 深夜放送の導線は奥付からラテ欄へ移した（Issue #41）
+    await expect(colophonNav.getByRole('link', { name: '深夜放送' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
 
     assertNoConsoleErrors();

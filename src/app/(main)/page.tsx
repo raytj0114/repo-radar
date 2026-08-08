@@ -6,6 +6,7 @@ import { EarWeather } from '@/components/features/paper/ear-weather';
 import { Masthead } from '@/components/features/paper/masthead';
 import { PaperBody } from '@/components/features/paper/paper-body';
 import { PaperBodySkeleton } from '@/components/features/paper/paper-skeleton';
+import { RadioGuide } from '@/components/features/paper/radio-guide';
 import styles from '@/components/features/paper/paper.module.css';
 import { paperDateFor } from '@/lib/paper';
 
@@ -51,6 +52,10 @@ export default async function FrontPage() {
         <Suspense fallback={<PaperBodySkeleton />}>
           <PaperBody userId={session.user.id} paper={paper} />
         </Suspense>
+        {/* ラテ欄は取得ゼロの同期部品なので、Suspenseの外＝シェルとして即時送出する */}
+        <section className={styles.section}>
+          <RadioGuide />
+        </section>
         <Colophon userName={session.user.name} issueNumber={paper.issueNumber} current="front" />
       </div>
     </main>

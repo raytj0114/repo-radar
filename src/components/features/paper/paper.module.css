@@ -313,6 +313,11 @@
   margin-top: 6px;
 }
 
+/* 改行入りテキストをそのまま組む（要約の行立て・旧形式ダイジェストの本文） */
+.preLine {
+  white-space: pre-line;
+}
+
 /* 長文の抜粋を3行で止める（銘柄面のリリース本文） */
 .clamp3 {
   display: -webkit-box;

@@ -141,22 +141,24 @@ test.describe('トレンド面', () => {
   });
 });
 
-test.describe('デイリーダイジェスト', () => {
-  test('朝刊（entries形式）は総括とリンク付きカードで表示される', async ({ page }) => {
+test.describe('縮刷版', () => {
+  test('朝刊（entries形式）の号が総括とリンク付きの記事で組まれる', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/digest');
 
-    await expect(
-      page.getByRole('heading', { name: 'デイリーダイジェスト', level: 1 })
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: '縮刷版', level: 1 })).toBeVisible();
+    // 号の日付は**発行朝**（帰属日+1のJST朝6時）。帰属日の直刷り（1日ずれ）への回帰ガード:
+    // E2E_DIGEST_ENTRIES は帰属 2026-07-02 なので、紙面には七月三日と刷られる
+    await expect(page.getByText('二〇二六年七月三日')).toBeVisible();
+    await expect(page.getByText('二〇二六年七月二日')).toHaveCount(1); // 旧形式（帰属7/1）の発行朝のみ
     // 冒頭の総括はルールベース生成（シードの3エントリと対応）
     await expect(page.getByText('3リポジトリ・3リリース（うち破壊的変更1件）')).toBeVisible();
-    // AIの見出しと破壊的変更バッジ（exact指定で総括内の部分一致と区別する）。
+    // AIの見出しと破壊的変更の標（一面と同じ【破壊的変更】表記）。
     // 当日の朝刊シード（E2E_TODAY_DIGEST_ENTRIES）にも破壊的変更・同一リポジトリの
     // リンクが含まれるため、first()で厳密モード違反を避ける
     await expect(page.getByText(E2E_DIGEST_ENTRIES.entries[0].headline ?? '')).toBeVisible();
-    await expect(page.getByText('破壊的変更', { exact: true }).first()).toBeVisible();
-    // カードはリポジトリ詳細へのリンク
+    await expect(page.getByText('【破壊的変更】').first()).toBeVisible();
+    // 記事はリポジトリ詳細へのリンク
     await expect(page.getByRole('link', { name: /vercel\/next\.js/ }).first()).toHaveAttribute(
       'href',
       '/repos/vercel/next.js'
@@ -168,14 +170,14 @@ test.describe('デイリーダイジェスト', () => {
     assertNoConsoleErrors();
   });
 
-  test('旧形式（contentのみ）のダイジェストが表示され、未生成の案内は出ない', async ({ page }) => {
+  test('旧形式（contentのみ）の号が表示され、組版中の案内は出ない', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/digest');
 
     await expect(page.getByText(E2E_DIGEST.content)).toBeVisible();
-    // 当日分の朝刊をシードしている（紙面の一面検証用）ため、未生成のNoticeは出ない。
-    // Notice側の分岐は tests/ のユニットテストで担保する
-    await expect(page.getByText('本日分のダイジェストはまだ生成されていません')).toBeHidden();
+    // 当日分の朝刊をシードしている（紙面の一面検証用）ため、組版中の帯は出ない。
+    // 帯側の分岐（hasToday）はユニットテスト相当の判定式が単純なため、ここでは不在のみ見る
+    await expect(page.getByText('本日の朝刊は組版中')).toBeHidden();
 
     assertNoConsoleErrors();
   });

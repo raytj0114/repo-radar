@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { formatDateJa, toKanjiNumber } from '@/lib/format';
-import paperStyles from '@/components/features/paper/paper.module.css';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 import { SubscribeToggle } from './subscribe-toggle';
 
 export type LedgerRow = {
@@ -16,16 +15,16 @@ export type LedgerRow = {
 export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
   return (
     <div>
-      <span className={paperStyles.kanban}>購読台帳</span>
+      <span className={styles.kanban}>購読台帳</span>
       {rows.length > 0 ? (
-        <table className={paperStyles.chart}>
+        <table className={styles.chart}>
           <caption>
             購読中　{toKanjiNumber(rows.length)}銘柄　—　紙面の観測域はこの台帳で決まる
           </caption>
           <thead>
             <tr>
               <th scope="col">銘柄</th>
-              <th scope="col" className={paperStyles.num}>
+              <th scope="col" className={styles.num}>
                 登録日
               </th>
               <th scope="col">手続</th>
@@ -37,7 +36,7 @@ export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
                 <td className={styles.breakAll}>
                   <Link href={`/repos/${row.owner}/${row.name}`}>{row.fullName}</Link>
                 </td>
-                <td className={paperStyles.num}>{formatDateJa(row.createdAt.toISOString())}</td>
+                <td className={styles.num}>{formatDateJa(row.createdAt.toISOString())}</td>
                 <td>
                   <SubscribeToggle
                     owner={row.owner}
@@ -51,7 +50,7 @@ export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
           </tbody>
         </table>
       ) : (
-        <p className={paperStyles.kyusai}>
+        <p className={styles.kyusai}>
           購読銘柄なし。下の銘柄検索または星取帳から登録すると、翌朝から紙面が組まれる。
         </p>
       )}

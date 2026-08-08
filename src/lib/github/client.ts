@@ -43,7 +43,9 @@ const MAX_PER_PAGE = 100;
 /**
  * スター一覧の取得量（Issue #42）。上限は「選択して取り込むUI」の実用サイズで、
  * `STARRED_IMPORT_MAX`（取り込みactionの受理上限）から導出して二重定義を避ける。
- * 超過分は新しい順の先頭300件で打ち切る（全量同期はしない設計判断）
+ * 超過分は新しい順の先頭 `STARRED_IMPORT_MAX` 件で打ち切る（全量同期はしない設計判断）。
+ * maxPagesの導出は「十分なページ数」の確保で、件数の正はsliceが持つ
+ * （MAXが100の倍数でないとページ境界と一致しない。#42レビュー指摘4）
  */
 const STARRED_FETCH = {
   perPage: MAX_PER_PAGE,
@@ -228,9 +230,9 @@ export async function fetchUserLogin(accountId: string): Promise<string | null> 
 
 /**
  * 公開スター一覧（新しい順）。既定のAcceptでは素のリポジトリ配列が返る。
- * `STARRED_FETCH.maxPages` まで `Link: rel="next"` を辿り、超過分は打ち切る
- * （取り込みは選択式なので全量は不要。上限はサーバー定数のみで決める）。
- * 404（login消滅・改名直後）は想定内としてnullを返す
+ * `STARRED_FETCH.maxPages` まで `Link: rel="next"` を辿り、超過分は
+ * `STARRED_IMPORT_MAX` 件で打ち切る（取り込みは選択式なので全量は不要。
+ * 上限はサーバー定数のみで決める）。404（login消滅・改名直後）は想定内としてnullを返す
  */
 export async function fetchStarredRepositories(login: string): Promise<Repository[] | null> {
   const basePath = `/users/${encodeURIComponent(login)}/starred`;
@@ -243,7 +245,9 @@ export async function fetchStarredRepositories(login: string): Promise<Repositor
     repositories.push(...parseWith(repositoryListSchema, await res.json(), `GET ${basePath}`));
     url = nextPageUrl(res.headers.get('link'));
   }
-  return repositories;
+  // 「画面に出す件数 ≦ actionが受理する件数」の正はこのslice。
+  // ページ数の導出だけだとMAXが100の倍数のときしか一致しない
+  return repositories.slice(0, STARRED_IMPORT_MAX);
 }
 
 /** 取得量の指定。呼び出し側（サーバー）の定数のみで決める。クライアント入力は渡さない */

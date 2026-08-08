@@ -1,5 +1,5 @@
 import type { DigestEntry } from '@/lib/digest';
-import { digestWindowFor } from '@/lib/digest-window';
+import { digestDayOf, digestWindowFor, WINDOW_END_HOUR_UTC } from '@/lib/digest-window';
 import { formatSilenceSpanJa, toKanjiNumber } from '@/lib/format';
 import { normalizeFullName } from '@/lib/repo-key';
 
@@ -18,11 +18,12 @@ export const SILENCE_THRESHOLD_DAYS = 180;
 export const SILENCE_BOLD_DAYS = 365;
 
 /**
- * 相場欄が見るトレンドの観測窓（日）。星数スナップショットの採取（`src/lib/star-snapshot.ts`）と
- * **必ず同じ値を使う**ため、ここを唯一の出所にする（Issue #39）。
+ * 相場欄・トレンド面が見るトレンドの観測窓（日）。星数スナップショットの採取
+ * （`src/lib/star-snapshot.ts`）と**必ず同じ値を使う**ため、ここを唯一の出所にする（Issue #39）。
  * ずれると採取側の母集団が表示銘柄を包含しなくなり、前日比が「履歴の無い銘柄」として
  * 静かに欠ける（型にもテストにも出ず、画面上も未採取と区別が付かない）。
- * `/trending` の窓はこれとは独立: 言語フィルタを持つ別画面で、順位の深さも用途も違う
+ * `/trending` は #39時点では独立窓だったが、#41 で「相場の全表（相場欄の続き面）」に
+ * 再定義したため同じ窓に統一した
  */
 export const MARKET_WINDOW_DAYS = 30;
 
@@ -57,20 +58,31 @@ export type PaperDate = {
 };
 
 /**
- * 「今日の号」を決める。窓終端（= now以前の直近21:00 UTC）が発行時刻で、
- * そのJST日付が紙面の日付。cronの発火遅れや閲覧時刻に依存しない
+ * 帰属日（DailyDigest.date のYYYY-MM-DD）から号を復元する。発行時刻は帰属日の21:00 UTC
+ * （= 窓終端 = 翌朝6:00 JST）で、そのJST日付が紙面の日付。縮刷版が過去号を
+ * 「発行朝の日付」で刷るための逆引き口（/digest の帰属日直刷りは1日ずれて見えていた）
  */
-export function paperDateFor(now: Date): PaperDate {
-  const window = digestWindowFor(now);
-  const issuedOnJst = jstDayOf(window.end);
+export function paperDateForDigestDay(digestDay: string): PaperDate {
+  const issuedAt = new Date(
+    `${digestDay}T${String(WINDOW_END_HOUR_UTC).padStart(2, '0')}:00:00.000Z`
+  );
+  const issuedOnJst = jstDayOf(issuedAt);
   const foundingMs = Date.parse(`${FOUNDING_DATE_JST}T00:00:00Z`);
   const issuedMs = Date.parse(`${issuedOnJst}T00:00:00Z`);
   const issueNumber = Math.max(1, Math.round((issuedMs - foundingMs) / DAY_MS) + 1);
   return {
-    digestDay: window.end.toISOString().slice(0, 10),
-    issuedAtIso: window.end.toISOString(),
+    digestDay,
+    issuedAtIso: issuedAt.toISOString(),
     issueNumber,
   };
+}
+
+/**
+ * 「今日の号」を決める。窓終端（= now以前の直近21:00 UTC）が発行時刻で、
+ * そのJST日付が紙面の日付。cronの発火遅れや閲覧時刻に依存しない
+ */
+export function paperDateFor(now: Date): PaperDate {
+  return paperDateForDigestDay(digestDayOf(digestWindowFor(now)));
 }
 
 /** リポジトリの同一性判定。src/lib/digest.ts の repoKeyOf と同じ正規化（小文字） */

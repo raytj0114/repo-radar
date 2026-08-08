@@ -31,6 +31,17 @@ export const RADIO_STATION_META = {
   nb: { id: 'nb', freq: 92.4, name: '深夜便', short: '深夜便' },
 } as const satisfies Record<RadioStationId, Pick<RadioStation, 'id' | 'freq' | 'name' | 'short'>>;
 
+/**
+ * ラテ欄（紙面の番組表。Issue #41）に刷る各局の時刻と番組名。
+ * 放送の実装（composeScheduledBroadcast 等）と対応する編集文言をここで一元化し、
+ * 将来 nb（深夜便）が開局するときはラテ欄と放送が同時に変わるようにする
+ */
+export const RADIO_PROGRAM_GUIDE = {
+  r1: { time: '朝六時', program: '定時放送（本日の紙面の読み下し）' },
+  wx: { time: '終日', program: '気象通報（API残量の定点観測）' },
+  nb: { time: '深夜', program: '（休止中・開局準備）' },
+} as const satisfies Record<RadioStationId, { time: string; program: string }>;
+
 /** 原稿の一段落。`pre` は前の段落を読み終えてからの間（ms） */
 export type RadioSegment = {
   text: string;

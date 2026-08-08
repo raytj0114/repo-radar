@@ -1,11 +1,10 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
-import { signOutAction } from '@/app/actions/auth';
 import {
   SubscriptionBody,
   type QueryState,
 } from '@/components/features/favorites/subscription-body';
-import { SubscriptionMasthead } from '@/components/features/favorites/subscription-masthead';
+import { Colophon } from '@/components/features/paper/colophon';
+import { MenMasthead } from '@/components/features/paper/men-masthead';
 import paperStyles from '@/components/features/paper/paper.module.css';
 import { auth } from '@/lib/auth';
 import { paperDateFor } from '@/lib/paper';
@@ -63,28 +62,17 @@ export default async function FavoritesPage({
   return (
     <main className={paperStyles.backdrop}>
       <div className={paperStyles.paper}>
-        <SubscriptionMasthead paper={paper} />
+        <MenMasthead paper={paper} title="購読面" edition="購読の受付" />
         <SubscriptionBody
           userId={session.user.id}
           queryState={queryState}
           showStarred={showStarred}
         />
-        <footer className={paperStyles.colophon}>
-          <nav aria-label="紙面案内">
-            <Link href="/">一面へ戻る</Link>
-            <span aria-hidden="true">｜</span>
-            <Link href="/trending">トレンド面</Link>
-            <span aria-hidden="true">｜</span>
-            <Link href="/digest">縮刷版（ダイジェスト）</Link>
-            <span aria-hidden="true">｜</span>
-            <form action={signOutAction}>
-              <button type="submit" className={paperStyles.linkButton}>
-                退勤（ログアウト）
-              </button>
-            </form>
-          </nav>
-          発行　RepoRadar観測所
-        </footer>
+        <Colophon
+          userName={session.user.name}
+          issueNumber={paper.issueNumber}
+          current="favorites"
+        />
       </div>
     </main>
   );

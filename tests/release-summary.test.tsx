@@ -22,11 +22,12 @@ afterEach(() => {
 async function showSummary() {
   render(<ReleaseSummary {...PROPS} />);
   fireEvent.click(screen.getByRole('button', { name: 'AI要約を表示' }));
-  await screen.findByText('AI要約');
+  // 囲み引用の出典行（——AI要約（タグ名））が出たら要約の刷り上がり
+  await screen.findByText(`——AI要約（${PROPS.tagName}）`);
 }
 
 describe('ReleaseSummary', () => {
-  it('構造化された要約は見出し・前文・3行と破壊的変更バッジを表示する', async () => {
+  it('構造化された要約は見出し・前文・3行と破壊的変更の標を表示する', async () => {
     getReleaseSummaryMock.mockResolvedValue({
       ok: true,
       summary: SUMMARY_TEXT,
@@ -39,12 +40,12 @@ describe('ReleaseSummary', () => {
 
     expect(screen.getByText('Turbopack既定化')).toBeInTheDocument();
     expect(screen.getByText('ビルドの既定がTurbopackに切り替わった。')).toBeInTheDocument();
-    expect(screen.getByText('破壊的変更')).toBeInTheDocument();
+    expect(screen.getByText('【破壊的変更】')).toBeInTheDocument();
     // 3行は改行のまま保持される（既定のnormalizerは改行を潰すので無効化する）
     expect(screen.getByText(SUMMARY_TEXT, { normalizer: (text) => text })).toBeInTheDocument();
   });
 
-  it('破壊的変更が無ければバッジを出さない', async () => {
+  it('破壊的変更が無ければ標を出さない', async () => {
     getReleaseSummaryMock.mockResolvedValue({
       ok: true,
       summary: SUMMARY_TEXT,
@@ -55,7 +56,7 @@ describe('ReleaseSummary', () => {
 
     await showSummary();
 
-    expect(screen.queryByText('破壊的変更')).not.toBeInTheDocument();
+    expect(screen.queryByText('【破壊的変更】')).not.toBeInTheDocument();
   });
 
   it('構造化以前のキャッシュ行は要約テキストだけを表示する', async () => {
@@ -70,7 +71,7 @@ describe('ReleaseSummary', () => {
     await showSummary();
 
     expect(screen.getByText('・旧要約')).toBeInTheDocument();
-    expect(screen.queryByText('破壊的変更')).not.toBeInTheDocument();
+    expect(screen.queryByText('【破壊的変更】')).not.toBeInTheDocument();
   });
 
   it('失敗時はメッセージを出し、要約は表示しない', async () => {
@@ -83,6 +84,6 @@ describe('ReleaseSummary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI要約を表示' }));
 
     expect(await screen.findByText('しばらく時間をおいて再試行してください')).toBeInTheDocument();
-    expect(screen.queryByText('AI要約')).not.toBeInTheDocument();
+    expect(screen.queryByText(/——AI要約/)).not.toBeInTheDocument();
   });
 });

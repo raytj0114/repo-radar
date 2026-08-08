@@ -73,12 +73,24 @@ test.describe('紙面（トップ）', () => {
     await expect(page.getByText('4,999 ／ 5,000')).toBeVisible();
     await expect(page.getByText('晴', { exact: true })).toBeVisible();
 
+    // ラテ欄（Issue #41）: JORR の番組表と、世界観の内側に置いた /radio への導線
+    await expect(page.getByText('JORR 本日の放送')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'レポレーダー第一' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /受信機を合わせる/ })).toHaveAttribute(
+      'href',
+      '/radio'
+    );
+
     // 奥付: 紙面内ナビ（ヘッダーの代替）とログアウト
-    await expect(page.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
-    // 購読面への導線（Issue #42。#41 で置き場を整理する）
-    await expect(page.getByRole('link', { name: '購読面' })).toHaveAttribute('href', '/favorites');
-    // 深夜放送への導線（Issue #32。#41 でラテ欄へ移す）
-    await expect(page.getByRole('link', { name: '深夜放送' })).toHaveAttribute('href', '/radio');
+    const colophonNav = page.getByRole('navigation', { name: '紙面案内' });
+    await expect(colophonNav.getByRole('link', { name: '縮刷版（ダイジェスト）' })).toBeVisible();
+    // 購読面への導線（Issue #42）
+    await expect(colophonNav.getByRole('link', { name: '購読面' })).toHaveAttribute(
+      'href',
+      '/favorites'
+    );
+    // 深夜放送の導線は奥付からラテ欄へ移した（Issue #41）
+    await expect(colophonNav.getByRole('link', { name: '深夜放送' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
 
     assertNoConsoleErrors();
@@ -103,52 +115,71 @@ test.describe('紙面（トップ）', () => {
   });
 });
 
-test.describe('トレンド', () => {
-  test('スターランキングが表示される', async ({ page }) => {
+test.describe('トレンド面', () => {
+  test('相場の全表が組まれ、前日比が一面の相場欄と同じ帯で出る', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/trending');
 
-    await expect(page.getByRole('heading', { name: 'トレンド', level: 1 })).toBeVisible();
-    await expect(page.locator('main ol > li')).toHaveCount(3);
-    // 18420 → 18.4K。モックの数値がサーバー側fetch経由で描画されている証拠になる
-    await expect(page.getByText('★ 18.4K')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'トレンド面', level: 1 })).toBeVisible();
+    await expect(page.locator('main tbody > tr')).toHaveCount(3);
+    // 18420 → ja-JPロケールの桁区切り。モックの数値がサーバー側fetch経由で描画されている証拠になる
+    await expect(page.getByText('18,420')).toBeVisible();
+
+    // 前日比（Issue #40/#41）: 数字の出所は一面の相場欄と同じ星数スナップショットの実差分だけ。
+    // 三態（前日比 / 欠測を挟む直近観測比 / 履歴なしの日割）が同じ列に並ぶ
+    const row = (fullName: string) => page.getByRole('row').filter({ hasText: fullName });
+    await expect(row('octocat/observability-dashboard-toolkit')).toContainText('▲300');
+    await expect(row('octocat/ferris-stream-processor')).toContainText('▼120※');
+    await expect(row('octocat/nolang')).toContainText('日割');
+    await expect(page.getByRole('cell', { name: '前日比 300増', exact: true })).toBeVisible();
 
     assertNoConsoleErrors();
   });
 
-  test('言語フィルタで絞り込める', async ({ page }) => {
+  test('言語別の判子で絞り込める', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/trending');
 
     await page
-      .getByRole('navigation', { name: '言語フィルタ' })
+      .getByRole('navigation', { name: '言語別' })
       .getByRole('link', { name: 'Rust' })
       .click();
 
     await expect(page).toHaveURL(/\/trending\?language=Rust$/);
-    await expect(page.locator('main ol > li')).toHaveCount(1);
+    await expect(page.locator('main tbody > tr')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'octocat/ferris-stream-processor' })).toBeVisible();
+
+    // 活性判子（墨地）の文字は紙色。`.paper a { color: inherit }` に負けると
+    // 墨地に墨文字＝不可視になる（プレビュー実機で発見した回帰のガード）
+    const activeStamp = page
+      .getByRole('navigation', { name: '言語別' })
+      .getByRole('link', { name: 'Rust' });
+    await expect(activeStamp).toHaveAttribute('aria-current', 'page');
+    await expect(activeStamp).toHaveCSS('color', 'rgb(246, 240, 227)');
+    await expect(activeStamp).toHaveCSS('background-color', 'rgb(33, 28, 20)');
 
     assertNoConsoleErrors();
   });
 });
 
-test.describe('デイリーダイジェスト', () => {
-  test('朝刊（entries形式）は総括とリンク付きカードで表示される', async ({ page }) => {
+test.describe('縮刷版', () => {
+  test('朝刊（entries形式）の号が総括とリンク付きの記事で組まれる', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/digest');
 
-    await expect(
-      page.getByRole('heading', { name: 'デイリーダイジェスト', level: 1 })
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: '縮刷版', level: 1 })).toBeVisible();
+    // 号の日付は**発行朝**（帰属日+1のJST朝6時）。帰属日の直刷り（1日ずれ）への回帰ガード:
+    // E2E_DIGEST_ENTRIES は帰属 2026-07-02 なので、紙面には七月三日と刷られる
+    await expect(page.getByText('二〇二六年七月三日')).toBeVisible();
+    await expect(page.getByText('二〇二六年七月二日')).toHaveCount(1); // 旧形式（帰属7/1）の発行朝のみ
     // 冒頭の総括はルールベース生成（シードの3エントリと対応）
     await expect(page.getByText('3リポジトリ・3リリース（うち破壊的変更1件）')).toBeVisible();
-    // AIの見出しと破壊的変更バッジ（exact指定で総括内の部分一致と区別する）。
+    // AIの見出しと破壊的変更の標（一面と同じ【破壊的変更】表記）。
     // 当日の朝刊シード（E2E_TODAY_DIGEST_ENTRIES）にも破壊的変更・同一リポジトリの
     // リンクが含まれるため、first()で厳密モード違反を避ける
     await expect(page.getByText(E2E_DIGEST_ENTRIES.entries[0].headline ?? '')).toBeVisible();
-    await expect(page.getByText('破壊的変更', { exact: true }).first()).toBeVisible();
-    // カードはリポジトリ詳細へのリンク
+    await expect(page.getByText('【破壊的変更】').first()).toBeVisible();
+    // 記事はリポジトリ詳細へのリンク
     await expect(page.getByRole('link', { name: /vercel\/next\.js/ }).first()).toHaveAttribute(
       'href',
       '/repos/vercel/next.js'
@@ -160,25 +191,27 @@ test.describe('デイリーダイジェスト', () => {
     assertNoConsoleErrors();
   });
 
-  test('旧形式（contentのみ）のダイジェストが表示され、未生成の案内は出ない', async ({ page }) => {
+  test('旧形式（contentのみ）の号が表示され、組版中の案内は出ない', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/digest');
 
     await expect(page.getByText(E2E_DIGEST.content)).toBeVisible();
-    // 当日分の朝刊をシードしている（紙面の一面検証用）ため、未生成のNoticeは出ない。
-    // Notice側の分岐は tests/ のユニットテストで担保する
-    await expect(page.getByText('本日分のダイジェストはまだ生成されていません')).toBeHidden();
+    // 当日分の朝刊をシードしている（紙面の一面検証用）ため、組版中の帯は出ない。
+    // 帯側の分岐（hasToday）はユニットテスト相当の判定式が単純なため、ここでは不在のみ見る
+    await expect(page.getByText('本日の朝刊は組版中')).toBeHidden();
 
     assertNoConsoleErrors();
   });
 });
 
-test.describe('リポジトリ詳細', () => {
+test.describe('銘柄面', () => {
   test('リポジトリ情報とリリース履歴が表示される', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${PRIMARY_FAVORITE.owner}/${PRIMARY_FAVORITE.name}`);
 
-    await expect(page.getByRole('heading', { name: PRIMARY_FULL_NAME, level: 1 })).toBeVisible();
+    // h1は面の題字（銘柄面）。銘柄名は欄の見出し（h2）になる（Issue #41）
+    await expect(page.getByRole('heading', { name: '銘柄面', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: PRIMARY_FULL_NAME, level: 2 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'リリース履歴', level: 2 })).toBeVisible();
     await expect(page.locator('main ol > li')).toHaveCount(VISIBLE_RELEASES_PER_REPO);
     await expect(page.getByRole('link', { name: 'v16.2.0', exact: true })).toBeVisible();
@@ -192,7 +225,7 @@ test.describe('リポジトリ詳細', () => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${MISSING_OWNER}/unknown-repo`);
 
-    await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
+    await expect(page.getByText('該当銘柄は見当たらない')).toBeVisible();
 
     assertNoConsoleErrors();
   });
@@ -206,7 +239,7 @@ test.describe('リポジトリ詳細', () => {
     const name = 'parallel-fetch';
 
     await page.goto(`/repos/${owner}/${name}`);
-    await expect(page.getByRole('heading', { name: `${owner}/${name}`, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${owner}/${name}`, level: 2 })).toBeVisible();
 
     const log: { path: string; startedAt: number; endedAt: number | null }[] = await (
       await request.get(`${MOCK_GITHUB_BASE_URL}/__requests?owner=${owner}`)
@@ -235,7 +268,7 @@ test.describe('リポジトリ詳細', () => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${MISSING_OWNER}/${FAILING_RELEASES_NAME}`);
 
-    await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
+    await expect(page.getByText('該当銘柄は見当たらない')).toBeVisible();
 
     assertNoConsoleErrors();
   });

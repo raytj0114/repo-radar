@@ -5,6 +5,7 @@ import {
   composeMarket,
   listSilent,
   paperDateFor,
+  paperDateForDigestDay,
   pickFrontPage,
   weatherFor,
   type LatestSignal,
@@ -71,6 +72,26 @@ describe('paperDateFor', () => {
 
   it('創刊日より前でも第一号を下回らない', () => {
     expect(paperDateFor(new Date('2026-07-01T10:00:00Z')).issueNumber).toBe(1);
+  });
+});
+
+describe('paperDateForDigestDay', () => {
+  it('帰属日から発行朝（帰属日21:00 UTC = 翌朝6:00 JST）の号を復元する', () => {
+    // 縮刷版が帰属日をそのまま刷ると発行朝より1日古く見える（/digest日付ずれ。Issue #41）
+    const paper = paperDateForDigestDay('2026-08-01');
+    expect(paper.digestDay).toBe('2026-08-01');
+    expect(paper.issuedAtIso).toBe('2026-08-01T21:00:00.000Z');
+    expect(paper.issueNumber).toBe(1);
+  });
+
+  it('paperDateFor と同じ号に一致する（式の二重化がない）', () => {
+    const fromNow = paperDateFor(NOW);
+    expect(paperDateForDigestDay(fromNow.digestDay)).toEqual(fromNow);
+  });
+
+  it('号数は発行朝のJST日付基準で進む', () => {
+    // 帰属日08-02の朝刊は 08-03 06:00 JST 発行 → 第二号
+    expect(paperDateForDigestDay('2026-08-02').issueNumber).toBe(2);
   });
 });
 

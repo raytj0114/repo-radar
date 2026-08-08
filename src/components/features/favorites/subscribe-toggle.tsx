@@ -3,12 +3,12 @@
 import { useTransition } from 'react';
 import clsx from 'clsx';
 import { addFavorite, removeFavorite } from '@/app/actions/favorites';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 
 /**
- * 紙面版の購読トグル（判子）。呼ぶactionは既存のFavoriteToggle（chrome画面用）と同じで、
- * 見た目だけを紙面の語彙で持つ。真の状態はrevalidate後のサーバー再描画が返す
- * （useOptimisticは導入しない方針。Issue #42）
+ * 購読トグル（判子）。#41 で旧FavoriteToggle（chrome画面用の星アイコン）を吸収し、
+ * 全画面（購読面・トレンド面・銘柄面）がこの判子で購読を扱う。
+ * 真の状態はrevalidate後のサーバー再描画が返す（useOptimisticは導入しない方針。Issue #42）
  */
 export function SubscribeToggle({
   owner,

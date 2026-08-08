@@ -2,7 +2,7 @@
 
 import { ErrorState } from '@/components/ui/error-state';
 
-// /（紙面）のエラー境界。chrome画面側は (chrome)/error.tsx が受ける
+// 認証画面すべてのエラー境界（(chrome)廃止後の1枚。Issue #41）
 export default function MainError(props: {
   error: Error & { digest?: string };
   reset: () => void;

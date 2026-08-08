@@ -3,6 +3,8 @@
    紙 #f6f0e3 / 墨 #211c14 / 朱 #a63a2e の三色のみ。
    見出しはゴシック、本文は明朝（日本の新聞の組み方）。
    書体はシステムフォントのみで外部依存を増やさない。
+   全画面がこの1ファイルを意匠辞書として共有する（Issue #41）。
+   色変数と書体は .backdrop が宣言するため、どの面も必ず .backdrop の内側で組むこと。
    ============================================================ */
 
 .backdrop {
@@ -31,6 +33,11 @@
   background: var(--paper);
   padding: 26px 34px 20px;
   box-shadow: 0 2px 18px rgba(30, 22, 10, 0.35);
+}
+
+/* 一枚もの（ログイン面）。題字と案内だけの白紙面は幅を絞る */
+.paperNarrow {
+  max-width: 560px;
 }
 
 /* 紙面内のリンクは記事の一部として組む（青リンクにしない） */
@@ -114,6 +121,25 @@
   padding: 4px 0;
 }
 
+/* ---- 内面の扉（一面の題字より一回り控えめな面の題字帯。#42購読面が初出） ---- */
+.wordmark {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+}
+.menTitle {
+  margin: 2px 0 0;
+  text-align: center;
+  font-family: var(--gothic);
+  font-weight: 900;
+  font-size: clamp(24px, 4.4vw, 32px);
+  letter-spacing: 0.5em;
+  /* 字間を見出し全体で均すため、末尾の空きを詰める */
+  text-indent: 0.5em;
+  line-height: 1.4;
+}
+
 /* ---- 欄名（白抜き看板）と罫 ---- */
 .kanban {
   display: inline-block;
@@ -182,6 +208,27 @@
   font-size: 12px;
 }
 
+/* 記事内の囲み引用（銘柄面のAI要約が使う。02モックの語彙） */
+.pullquote {
+  break-inside: avoid;
+  border: 1px solid var(--ink);
+  padding: 10px 14px;
+  margin: 12px 4px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 2;
+}
+.pullquote small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+/* 囲みの中の段落本文は左に組む（見出し・出典は囲みの中央揃えを継ぐ） */
+.pullquote p {
+  margin: 0;
+  text-align: left;
+}
+
 /* ---- 中段・下段グリッド ---- */
 .row {
   display: grid;
@@ -218,6 +265,81 @@
   margin: 0;
   text-indent: 1em;
   text-align: justify;
+}
+
+/* コラム（朱地・縦組みの欄名札。02モックの語彙。縮刷版の号札が使う） */
+.columnBox {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.tate {
+  writing-mode: vertical-rl;
+  background: var(--shu);
+  color: var(--paper);
+  font-family: var(--gothic);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5em;
+  padding: 14px 7px;
+  flex: none;
+}
+.columnBody {
+  min-width: 0;
+  font-size: 13.5px;
+  text-align: justify;
+}
+.columnBody p {
+  margin: 0;
+  text-indent: 1em;
+}
+
+/* 連載（3px double罫で区切る。02モックの語彙。銘柄面のリリース履歴が使う） */
+.serial {
+  border-top: 3px double var(--ink);
+  margin-top: 22px;
+  padding-top: 12px;
+}
+.serialBody {
+  columns: 2;
+  column-gap: 26px;
+  column-rule: 1px solid var(--rule);
+  font-size: 13.5px;
+  text-align: justify;
+}
+.serialBody p {
+  margin: 0;
+  text-indent: 1em;
+}
+/* 次回予告・続き面の案内（右寄せの小活字） */
+.nextNote {
+  font-size: 11.5px;
+  text-align: right;
+  margin-top: 6px;
+}
+
+/* 改行入りテキストをそのまま組む（要約の行立て・旧形式ダイジェストの本文） */
+.preLine {
+  white-space: pre-line;
+}
+
+/* dl を一行の対（「星数 18,420」）として組む（銘柄面の観測値行） */
+.inlinePair dt,
+.inlinePair dd {
+  display: inline;
+  margin: 0;
+}
+.inlinePair dt {
+  font-family: var(--gothic);
+  margin-right: 0.4em;
+}
+
+/* 長文の抜粋を3行で止める（銘柄面のリリース本文） */
+.clamp3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 /* 短信 */
@@ -314,6 +436,162 @@
   margin-bottom: 10px;
 }
 
+/* ============================================================
+   フォーム語彙（#42購読面のパイロットを #41 で共有語彙へ昇格）
+   ============================================================ */
+
+/* ---- 記入欄（帳簿の罫に書き込む体裁） ---- */
+.searchForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 4px 0 10px;
+}
+.field {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 2px 4px;
+  font: inherit;
+  color: inherit;
+  letter-spacing: 0.05em;
+}
+.field:focus-visible {
+  outline: 2px solid var(--shu);
+  outline-offset: 2px;
+}
+.fieldNote {
+  margin: 0;
+  font-family: var(--gothic);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+/* ---- 判子（ボタン）。基本は墨、主動作は朱 ---- */
+.stamp {
+  font-family: var(--gothic);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  padding: 3px 14px;
+  cursor: pointer;
+}
+.stamp:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+.stamp:focus-visible {
+  outline: 2px solid var(--shu);
+  outline-offset: 2px;
+}
+.stamp:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.stampShu {
+  color: var(--shu);
+  border-color: var(--shu);
+}
+.stampShu:hover:not(:disabled) {
+  background: var(--shu);
+  color: var(--paper);
+}
+/* 表の行内に収める小判 */
+.stampSmall {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-indent: 0.15em;
+  padding: 1px 8px;
+}
+/* 押下済みの判子（リンク判子の現在地。トレンド面の言語欄が使う） */
+.stampOn {
+  background: var(--ink);
+  color: var(--paper);
+  cursor: default;
+}
+/* リンクの判子は `.paper a { color: inherit }`（詳細度 0,1,1）に文字色が負けて
+   墨地に墨文字＝不可視になるため、同等より強い詳細度で紙色を効かせる */
+.paper a.stampOn {
+  color: var(--paper);
+}
+
+/* ---- 星取帳（チェックボックスの記帳列） ---- */
+.check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--shu);
+  flex: none;
+  margin-top: 0.45em;
+}
+.starList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.starList li {
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--rule);
+}
+.starLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.starLabel b {
+  font-family: var(--gothic);
+  font-weight: 700;
+}
+/* 朱枠の小札（「購読中」「試」などの標） */
+.markShu {
+  font-family: var(--gothic);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--shu);
+  border: 1px solid var(--shu);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.repoDesc {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+.importBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+
+/* ---- 扉（欄を開く前の案内） ---- */
+.teaser {
+  border: 1px dotted var(--rule);
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 12.5px;
+}
+.teaser a {
+  font-family: var(--gothic);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+/* 長い銘柄名でも375pxで横スクロールを出さない（不変条件7の保険） */
+.breakAll {
+  overflow-wrap: anywhere;
+}
+
 /* 奥付 */
 .colophon {
   border-top: 1px solid var(--ink);
@@ -379,6 +657,9 @@
     padding-left: 0;
     border-top: 1px solid var(--rule);
     padding-top: 14px;
+  }
+  .serialBody {
+    columns: 1;
   }
 }
 @media (min-width: 761px) and (max-width: 980px) {

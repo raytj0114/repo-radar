@@ -78,8 +78,11 @@ test.describe('購読トグルの往復', () => {
     const name = `${MINTED_REPO_PREFIX}-detail-${testInfo.project.name}-${Date.now()}`;
     await page.goto(`/repos/${MINTED_OWNER}/${name}`);
 
-    const addButton = page.getByRole('button', { name: 'お気に入りに追加' });
-    const removeButton = page.getByRole('button', { name: 'お気に入りから外す' });
+    // 銘柄面も購読判子（SubscribeToggle）で組まれる（Issue #41）。見ているものは変わらない:
+    // 押した直後のラベル反転＝action応答の到達
+    const fullName = `${MINTED_OWNER}/${name}`;
+    const addButton = page.getByRole('button', { name: `${fullName}を購読する` });
+    const removeButton = page.getByRole('button', { name: `${fullName}の購読をやめる` });
 
     await expect(addButton).toBeVisible();
     await addButton.click();
@@ -96,10 +99,12 @@ test.describe('購読トグルの往復', () => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
 
     await page.goto('/trending');
+    // トレンド面は全表（table）+ 購読判子（SubscribeToggle）で組まれる（Issue #41）。
+    // 見ているものは変わらない: 押した直後の aria-pressed の反転＝action応答の到達
     const row = page
-      .locator('main ol > li')
+      .getByRole('row')
       .filter({ has: page.getByRole('link', { name: TRENDING_TARGET }) });
-    const star = row.getByRole('button', { name: /お気に入り/ });
+    const star = row.getByRole('button', { name: /購読/ });
     await expect(star).toBeVisible();
 
     // 開始状態は固定しない。前回の実行が故障（＝UIは戻らないがサーバーは書き込み済み）で

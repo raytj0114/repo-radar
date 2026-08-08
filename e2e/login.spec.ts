@@ -6,7 +6,7 @@ anonTest.describe('/login', () => {
   anonTest('GitHubでログインボタンが表示される', async ({ page }) => {
     await page.goto('/login');
 
-    await expect(page.getByRole('heading', { name: 'RepoRadar' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '日刊 RepoRadar' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'GitHubでログイン' })).toBeVisible();
   });
 });

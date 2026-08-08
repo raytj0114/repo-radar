@@ -32,3 +32,11 @@ export const importStarredInputSchema = z.object({
 });
 
 export type ImportStarredInput = z.infer<typeof importStarredInputSchema>;
+
+/**
+ * スター取り込みactionの結果。失敗をthrowで伝えると面ごとerror境界に落ち、
+ * 本番ではメッセージもマスクされる（#42レビュー指摘2）。表示経路の欄単位縮退と
+ * 対称になるよう、失敗も型付きの値でフォームへ返す
+ */
+export type ImportStarredResult =
+  { ok: true } | { ok: false; reason: 'invalid-input' | 'starred-unavailable' };

@@ -25,25 +25,24 @@
 src/
 ├── app/
 │   ├── (main)/              # 認証必須（layoutはauth()ガードのみ。DOMを足さない）
-│   │   ├── page.tsx         # 一面 = 紙面「日刊 RepoRadar」（Issue #31。全画面・ヘッダーなし）
-│   │   ├── radio/           # 深夜放送 JORR（Issue #32。全画面・ヘッダーなし）
-│   │   ├── favorites/       # 購読面 = 台帳・銘柄検索・星取帳（Issue #42。全画面・紙面意匠）
-│   │   └── (chrome)/        # グローバルヘッダー + max-w-3xl コンテナの従来UI画面群
-│   │       ├── trending/    # トレンド（言語別スターランキング）
-│   │       ├── repos/[owner]/[name]/  # リポジトリ詳細（リリース一覧+AI要約）
-│   │       └── digest/      # デイリーダイジェスト（履歴＝縮刷版）
-│   ├── (auth)/login/        # ヘッダーレス（全画面センタリング）
+│   │   ├── page.tsx         # 一面 = 紙面「日刊 RepoRadar」（Issue #31。ラテ欄は#41）
+│   │   ├── radio/           # 深夜放送 JORR（Issue #32。木目意匠＝紙面統一の意図的例外）
+│   │   ├── favorites/       # 購読面 = 台帳・銘柄検索・星取帳（Issue #42）
+│   │   ├── trending/        # トレンド面 = 相場の全表（相場欄の続き面。Issue #41）
+│   │   ├── repos/[owner]/[name]/  # 銘柄面 = 観測値+リリース履歴の連載+AI要約（Issue #41）
+│   │   └── digest/          # 縮刷版 = 過去号のアーカイブ（Issue #41）
+│   ├── (auth)/login/        # ログイン面 = 題字と一枚の白紙面（Issue #41）
 │   ├── actions/             # Server Actions（全て認証必須）
-│   │   ├── auth.ts          # signOutAction（ヘッダーと紙面奥付で共有）
+│   │   ├── auth.ts          # signOutAction（紙面奥付の「退勤」）
 │   │   ├── favorites.ts
 │   │   └── summaries.ts     # AI要約の取得/生成トリガー
 │   └── api/
 │       ├── auth/[...nextauth]/
 │       └── cron/digest/     # Vercel Cron専用（CRON_SECRETで保護）
 ├── components/
-│   ├── features/            # paper（紙面） / radio（受信機） / releases / digest / favorites
-│   ├── ui/                  # 汎用UI
-│   └── layout/              # グローバルヘッダー（(chrome)配下でのみ表示）
+│   ├── features/            # paper（紙面） / radio（受信機） / releases / digest / favorites / trending
+│   └── ui/                  # error-state（紙面調のエラー境界UI）のみ。#41でグローバルヘッダー
+│                            # （layout/）と旧UI部品（empty-state / notice）を廃止
 ├── lib/
 │   ├── env.ts               # 環境変数の唯一の入口（Zod検証）
 │   ├── prisma.ts
@@ -130,8 +129,9 @@ Next.js サーバー
   トレンドは検索1リクエストの `stargazers_count` を再利用し、お気に入りは1リポジトリ1リクエスト。
   両方に出た銘柄は**お気に入り側（`/repos` の直接読み）を採る**: `/search` の星数は非同期に更新される
   二次インデックス越しの値で、`fresh` はNextのData Cacheにしか効かないため
-  - 観測窓の長さは `src/lib/paper.ts` の `MARKET_WINDOW_DAYS` を唯一の出所とし、採取と相場欄で共有する
-    （ずれると採取側の母集団が表示銘柄を包含せず、前日比が静かに欠ける）。`/trending` の窓は独立
+  - 観測窓の長さは `src/lib/paper.ts` の `MARKET_WINDOW_DAYS` を唯一の出所とし、採取・相場欄・
+    トレンド面で共有する（ずれると採取側の母集団が表示銘柄を包含せず、前日比が静かに欠ける）。
+    `/trending` は #39時点では独立窓だったが、#41 で「相場の全表（相場欄の続き面）」に再定義し統一した
   - ただし `createdAfter` の起点は相場欄がレンダー時刻・採取が窓終端なので、両者の窓は日中1日ずれる。
     採取側が常に等しいか広くなる向きなので表示銘柄は含まれるが、「同一の集合」ではない
     （順位の入れ替わりは上位30件の緩衝が吸収する）
@@ -176,7 +176,11 @@ Next.js サーバー
 - 日付規則は「**常に今日の号**」: 紙面日付 = 窓終端（21:00 UTC = 朝6:00 JST）のJST日付。
   朝6時に翌号へ切り替わり、号数（創刊日 `FOUNDING_DATE_JST` からの経過日数+1）は毎日進む。
   当日の朝刊が無い日は一面のみ休載表示（他欄は生きたまま）。/digest の「本日分」判定も
-  同じ規則（`latestDigestDay`）を共有する
+  同じ規則（`latestDigestDay`）を共有する。縮刷版の過去号も**発行朝**の日付で刷る
+  （`paperDateForDigestDay` で帰属日から逆引き。帰属日の直刷りは一面と1日ずれて見える。#41で修正）
+- ラテ欄（#41）: 「JORR 本日の放送」の番組表と /radio への導線。局のメタは `RADIO_STATION_META`、
+  時刻・番組名は `RADIO_PROGRAM_GUIDE`（`src/lib/radio.ts`）を読むだけで**取得ゼロ**＝
+  Suspenseの外のシェルとして即時送出する。深夜便（nb）開局時はGUIDEと放送原稿を同時に更新する
 - entriesの `lede`（前文）は #31 で追加したためoptional。欠落した旧行は前文なしで組み、
   翌朝cronのバックフィルが improved 判定で自動補完する
 - 一面の「最大」決定則（`pickFrontPage`）: 破壊的変更 → 見出しあり → 要約あり → 新しい順。
@@ -253,6 +257,28 @@ Next.js サーバー
   同一ページaction応答がクライアントへ届かず、サーバーは書き込み済みなのにUIだけが
   pendingで固まるため（詳細は `favorites/page.tsx` のコメント）。既定表示の本文は
   DB1クエリのみ＝GitHub呼び出しゼロなので、ブロッキングでも体感は変わらない
+- 購読系action（`addFavorite` / `removeFavorite` / `importStarredFavorites`）の失効は
+  `revalidateFavoriteViews()` ＝ お気に入りが映る5面の列挙（`/`・`/favorites`・`/trending`・
+  `/radio`・`/repos/[owner]/[name]`）。`revalidatePath('/', 'layout')` は全ルートのfetchエントリが
+  持つ暗黙タグを失効させ、action応答の再レンダーが無関係な画面のGitHubキャッシュ
+  （login解決・スター一覧・検索）まで再取得していた（#42レビュー指摘3、#41で修正）
+- 取り込みの失敗（スター一覧が引けない・入力不正）は**throwせず型付き結果**
+  （`ImportStarredResult`）で返し、フォーム内の朱帯に縮退する。throwは面ごとエラー境界に落ち、
+  本番ではメッセージもマスクされる（#42レビュー指摘2、#41で修正）
+
+紙面意匠の全画面統一（Issue #41）:
+
+- 全画面（一面・トレンド面・縮刷版・銘柄面・購読面・ログイン面・エラー境界）が
+  `src/components/features/paper/paper.module.css` を**唯一の意匠辞書**として共有する。
+  色変数（紙・墨・朱・罫）と書体（明朝/ゴシック）は `.backdrop` が宣言するため、
+  どの面も必ず `.backdrop` の内側で組む（`:root` へは昇格させない。/radio＝木目の
+  意図的例外を構造的に守るため）
+- **ナビ規約**: グローバルヘッダーとハンバーガーは廃止。**上=一面への導線**（一面は耳ナビ、
+  内面は題字のwordmark）、**下=奥付フルナビ**（`Colophon`。現在の面はリンクにせず
+  `aria-current="page"`）。深夜放送への導線は一面のラテ欄が持つ
+- 購読の操作は全面で購読判子（`SubscribeToggle`）に統一（旧FavoriteToggleは#41で廃止）
+- エラー境界は `(main)/error.tsx` の1枚（紙面調の `ErrorState`: kanban「落丁」+ 判子「刷り直す」）
+- ナビ規約のE2Eは `e2e/paper-nav.spec.ts`（旧 `mobile-nav.spec.ts` の後継）
 
 ## レンダリング制約: Suspense × 同一ページServer Action（Issue #47 の実測）
 
@@ -286,8 +312,11 @@ Issue #47 で**同一ビルド**に対し 画面の形状 × 輸送層 を各20�
 **設計制約（#41 で全画面を紙面化する際も同じ）**: 同一ページでServer Actionを使う画面には
 Suspense境界を置かない。`loading.tsx` によるルート境界も同じ扱い。ストリーミングしてよいのは
 **同一ページのactionを持たない画面**（一面 `/` はこれに当たる。ログアウトは遷移なので該当しない）。
-本番がHTTP/2でも例外にしない。この制約により `(main)/(chrome)` には `loading.tsx` を置かない
-（Issue #49 で撤去。`/trending` と `/repos/[owner]/[name]` が購読トグルを持つため）。
+本番がHTTP/2でも例外にしない。この制約により認証画面群に `loading.tsx` は置かない
+（Issue #49 で撤去。#41 で `(chrome)` グループ自体も廃止）。`/trending` と
+`/repos/[owner]/[name]` と `/favorites` は購読判子を持つためブロッキングレンダー。
+縮刷版（/digest）はactionを持たずストリーミング可だが、本文がDB1クエリのみで得るものが
+無いためブロッキングのままにし、**Suspense境界を持つ面は一面 `/` だけ**に保つ（#41のユーザー裁定）。
 
 **回帰ガード**: `e2e/favorite-toggle.spec.ts` が両画面で購読トグルの往復（押した直後に
 表示が変わる）を検証する。E2Eは `next start` = HTTP/1.1 で回るので、境界を戻すと落ちる
@@ -337,7 +366,7 @@ Suspense境界を置かない。`loading.tsx` によるルート境界も同じ�
       state は `AUTH_SECRET` で署名・暗号化されており、**復号できない state は折り返さない**ため、
       任意のURLへリダイレクトさせる踏み台にはならない
   - `/login` のsignIn Server Action（GitHub OAuthへのリダイレクトのみ。実処理はAuth.js側）
-  - `signOutAction`（`src/app/actions/auth.ts`。ヘッダーと紙面奥付で共有。自セッションの破棄のみで副作用なし）
+  - `signOutAction`（`src/app/actions/auth.ts`。紙面奥付の「退勤」。自セッションの破棄のみで副作用なし）
   - `GET /api/cron/digest` （`Authorization: Bearer ${CRON_SECRET}` を検証）
 - 上流APIのエラー本文をクライアントへ透過しない（汎用メッセージに丸め、詳細はサーバーログ）
 - LLMプロンプトへの入力はサーバーで取得したデータのみ

@@ -149,6 +149,15 @@ test.describe('トレンド面', () => {
     await expect(page.locator('main tbody > tr')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'octocat/ferris-stream-processor' })).toBeVisible();
 
+    // 活性判子（墨地）の文字は紙色。`.paper a { color: inherit }` に負けると
+    // 墨地に墨文字＝不可視になる（プレビュー実機で発見した回帰のガード）
+    const activeStamp = page
+      .getByRole('navigation', { name: '言語別' })
+      .getByRole('link', { name: 'Rust' });
+    await expect(activeStamp).toHaveAttribute('aria-current', 'page');
+    await expect(activeStamp).toHaveCSS('color', 'rgb(246, 240, 227)');
+    await expect(activeStamp).toHaveCSS('background-color', 'rgb(33, 28, 20)');
+
     assertNoConsoleErrors();
   });
 });

@@ -517,6 +517,11 @@
   color: var(--paper);
   cursor: default;
 }
+/* リンクの判子は `.paper a { color: inherit }`（詳細度 0,1,1）に文字色が負けて
+   墨地に墨文字＝不可視になるため、同等より強い詳細度で紙色を効かせる */
+.paper a.stampOn {
+  color: var(--paper);
+}
 
 /* ---- 星取帳（チェックボックスの記帳列） ---- */
 .check {

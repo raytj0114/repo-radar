@@ -32,6 +32,21 @@ vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
 
 vi.mock('@/lib/starred', () => ({ loadStarredForUser: loadStarredMock }));
 
+/**
+ * お気に入り変更が失効させる面の一覧（revalidateFavoriteViews）。
+ * `revalidatePath('/', 'layout')` による全域失効をやめた（#42レビュー指摘3）ため、
+ * 「お気に入りが映る面がひとつ漏れなく列挙されているか」を呼び出し列で固定する
+ */
+function expectFavoriteViewsRevalidated() {
+  expect(revalidatePathMock.mock.calls).toEqual([
+    ['/'],
+    ['/favorites'],
+    ['/trending'],
+    ['/radio'],
+    ['/repos/[owner]/[name]', 'page'],
+  ]);
+}
+
 describe('addFavorite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -59,7 +74,7 @@ describe('addFavorite', () => {
       },
       update: {},
     });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/', 'layout');
+    expectFavoriteViewsRevalidated();
   });
 
   it('不正な入力はZodErrorで失敗し、DBに書き込まない', async () => {
@@ -87,6 +102,7 @@ describe('removeFavorite', () => {
     expect(deleteManyMock).toHaveBeenCalledWith({
       where: { userId: 'user_1', owner: 'vercel', name: 'next.js' },
     });
+    expectFavoriteViewsRevalidated();
   });
 });
 
@@ -123,20 +139,27 @@ describe('importStarredFavorites', () => {
     expect(createManyMock).not.toHaveBeenCalled();
   });
 
-  it('不正な入力（空配列）はZodErrorで失敗し、取得もDB書き込みもしない', async () => {
-    await expect(importStarredFavorites({ ids: [] })).rejects.toThrow();
+  it('不正な入力（空配列）は invalid-input で失敗し、取得もDB書き込みもしない', async () => {
+    await expect(importStarredFavorites({ ids: [] })).resolves.toEqual({
+      ok: false,
+      reason: 'invalid-input',
+    });
     expect(loadStarredMock).not.toHaveBeenCalled();
     expect(createManyMock).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
   it('上限（300件）を超える入力を拒否する', async () => {
     const ids = Array.from({ length: 301 }, (_, i) => i + 1);
-    await expect(importStarredFavorites({ ids })).rejects.toThrow();
+    await expect(importStarredFavorites({ ids })).resolves.toEqual({
+      ok: false,
+      reason: 'invalid-input',
+    });
     expect(createManyMock).not.toHaveBeenCalled();
   });
 
   it('選択idに合致する銘柄だけを、APIレスポンスのcanonical表記でcreateManyする', async () => {
-    await importStarredFavorites({ ids: [101, 999] });
+    await expect(importStarredFavorites({ ids: [101, 999] })).resolves.toEqual({ ok: true });
     expect(createManyMock).toHaveBeenCalledWith({
       data: [
         {
@@ -149,26 +172,35 @@ describe('importStarredFavorites', () => {
       ],
       skipDuplicates: true,
     });
-    expect(revalidatePathMock).toHaveBeenCalledTimes(1);
-    expect(revalidatePathMock).toHaveBeenCalledWith('/', 'layout');
+    expectFavoriteViewsRevalidated();
   });
 
   it('スター一覧に無いidだけなら書き込みを省き、成功として扱う（表示後の星外れ等）', async () => {
-    await expect(importStarredFavorites({ ids: [999] })).resolves.toBeUndefined();
+    await expect(importStarredFavorites({ ids: [999] })).resolves.toEqual({ ok: true });
     expect(createManyMock).not.toHaveBeenCalled();
-    expect(revalidatePathMock).toHaveBeenCalledWith('/', 'layout');
+    expectFavoriteViewsRevalidated();
   });
 
-  it('スター一覧が引けない（no-account等）なら黙って空成功にせず失敗させる', async () => {
+  it('スター一覧が引けない（no-account等）なら黙って空成功にせず starred-unavailable を返す', async () => {
     loadStarredMock.mockResolvedValue({ status: 'no-account' });
-    await expect(importStarredFavorites({ ids: [101] })).rejects.toThrow();
+    await expect(importStarredFavorites({ ids: [101] })).resolves.toEqual({
+      ok: false,
+      reason: 'starred-unavailable',
+    });
     expect(createManyMock).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
-  it('GitHubの例外（レート上限等）は伝播し、DBに書き込まない', async () => {
-    const rateLimited = new Error('rate limited');
-    loadStarredMock.mockRejectedValue(rateLimited);
-    await expect(importStarredFavorites({ ids: [101] })).rejects.toBe(rateLimited);
+  it('GitHubの例外（レート上限等）もthrowせず starred-unavailable に丸め、DBに書き込まない', async () => {
+    // throwすると面ごとerror境界に落ち、本番ではメッセージもマスクされる（#42レビュー指摘2）
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    loadStarredMock.mockRejectedValue(new Error('rate limited'));
+    await expect(importStarredFavorites({ ids: [101] })).resolves.toEqual({
+      ok: false,
+      reason: 'starred-unavailable',
+    });
     expect(createManyMock).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });

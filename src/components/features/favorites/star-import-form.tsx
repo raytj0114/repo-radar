@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { importStarredFavorites } from '@/app/actions/favorites';
+import paperStyles from '@/components/features/paper/paper.module.css';
 import styles from './favorites.module.css';
 
 export type StarRow = {
@@ -26,13 +27,20 @@ function selectedIds(form: HTMLFormElement): number[] {
 export function StarImportForm({ rows }: { rows: StarRow[] }) {
   const [pending, startTransition] = useTransition();
   const [selectedCount, setSelectedCount] = useState(0);
+  const [failed, setFailed] = useState(false);
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const ids = selectedIds(event.currentTarget);
     if (ids.length === 0) return;
     startTransition(async () => {
-      await importStarredFavorites({ ids });
+      const result = await importStarredFavorites({ ids });
+      if (!result.ok) {
+        // 失敗は欄内の朱帯で報じ、選択は保持する（面ごとerror境界に落とさない。#42レビュー指摘2）
+        setFailed(true);
+        return;
+      }
+      setFailed(false);
       // 取り込んだ行は再描画で「購読中」（チェック不能）になるため、選択件数の表示も畳む。
       // リセットしないと「選択　N銘柄」と有効なボタンだけが残り、表示が実態と食い違う
       setSelectedCount(0);
@@ -90,6 +98,11 @@ export function StarImportForm({ rows }: { rows: StarRow[] }) {
         <p className={styles.fieldNote} aria-live="polite">
           {selectedCount > 0 ? `選択　${selectedCount}銘柄` : '取り込む銘柄に印を。'}
         </p>
+      </div>
+      <div aria-live="polite">
+        {failed && !pending && (
+          <p className={paperStyles.stopPress}>星取帳の照合に失敗。時間をおいて再度お試しを。</p>
+        )}
       </div>
     </form>
   );

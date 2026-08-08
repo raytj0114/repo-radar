@@ -5,6 +5,7 @@ import releasesFixture from './fixtures/github/releases.json';
 import searchFixture from './fixtures/github/search-repositories.json';
 import starredFixture from './fixtures/github/starred.json';
 import userFixture from './fixtures/github/user.json';
+import { STARRED_IMPORT_MAX } from '@/lib/subscription-input';
 
 // 実APIは叩かない。envとglobal fetchをモックする。
 // `mock` 始まりの変数はvi.mockのファクトリから参照できる（vitestの巻き上げ規則）
@@ -460,6 +461,19 @@ describe('fetchStarredRepositories', () => {
     const client = await importClient();
     fetchMock.mockResolvedValue(fakeResponse({ message: 'Not Found' }, { status: 404 }));
     await expect(client.fetchStarredRepositories('gone')).resolves.toBeNull();
+  });
+
+  it('ページ合計が上限を超えても STARRED_IMPORT_MAX 件に切り詰める（表示件数≦受理件数）', async () => {
+    // maxPagesの導出（ceil(MAX/100)）だけだとMAXが100の倍数のときしか一致しない（#42レビュー指摘4）
+    const client = await importClient();
+    const oversizedPage = Array.from({ length: 150 }, () => starredFixture[0]);
+    fetchMock.mockResolvedValue(
+      fakeResponse(oversizedPage, {
+        headers: { link: '<https://api.github.com/user/583231/starred?page=2>; rel="next"' },
+      })
+    );
+    const repos = await client.fetchStarredRepositories('octocat');
+    expect(repos).toHaveLength(STARRED_IMPORT_MAX);
   });
 });
 

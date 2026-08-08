@@ -69,6 +69,15 @@ describe('env', () => {
     expect(env.AUTH_SECRET).toBe(VALID_ENV.AUTH_SECRET);
   });
 
+  it('AUTH_REDIRECT_PROXY_URL の末尾スラッシュは落とす（連結時の // を防ぐ）', async () => {
+    for (const [key, value] of Object.entries(VALID_ENV)) {
+      vi.stubEnv(key, value);
+    }
+    vi.stubEnv('AUTH_REDIRECT_PROXY_URL', 'https://example.com/api/auth/');
+    const env = await importEnv();
+    expect(env.AUTH_REDIRECT_PROXY_URL).toBe('https://example.com/api/auth');
+  });
+
   it('AUTH_REDIRECT_PROXY_URL がURL形式でない場合はエラーになる', async () => {
     for (const [key, value] of Object.entries(VALID_ENV)) {
       vi.stubEnv(key, value);

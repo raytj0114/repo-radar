@@ -19,7 +19,14 @@ const envSchema = z.object({
   // 任意。OAuthの折り返しを本番ドメインへ集約するリダイレクトプロキシ（Auth.js v5）。
   // URLごとにドメインが変わるプレビューデプロイでログインを成立させるためのもので、
   // 設定するのはVercelのPreviewスコープのみ（docs/ARCHITECTURE.md「プレビュー環境（認証とDB）」）
-  AUTH_REDIRECT_PROXY_URL: z.string().url().optional(),
+  // 末尾スラッシュは落とす。Auth.jsが `${この値}/callback/github` と単純連結するため、
+  // 付いたままだと `/api/auth//callback/github` になりGitHub側の完全一致照合から外れる
+  // （症状は「redirect_uri is not associated with this application」で原因から遠い）
+  AUTH_REDIRECT_PROXY_URL: z
+    .string()
+    .url()
+    .transform((value) => value.replace(/\/+$/, ''))
+    .optional(),
 
   // Gemini API
   GOOGLE_GEMINI_API_KEY: z.string().min(1),

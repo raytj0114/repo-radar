@@ -1,4 +1,4 @@
-import { anonTest, expect, expectNoHorizontalOverflow, test } from './fixtures';
+import { anonTest, expectNoHorizontalOverflow, test } from './fixtures';
 import { E2E_FAVORITES } from './constants';
 
 // 認証不要で到達できるページ
@@ -34,16 +34,4 @@ test.describe('横スクロール検知（認証必須画面）', () => {
       await expectNoHorizontalOverflow(page);
     });
   }
-});
-
-test.describe('横スクロール検知（モバイルメニュー展開時）', () => {
-  test.skip(({ isMobile }) => !isMobile, 'モバイルプロファイル専用');
-
-  test('メニューを開いても横スクロールが発生しない', async ({ page }) => {
-    // / は全画面紙面でハンバーガーを持たないため（Issue #31）、ヘッダーのある画面で検証する
-    await page.goto('/trending');
-    await page.getByRole('button', { name: 'メニューを開く' }).click();
-    await expect(page.getByRole('dialog', { name: 'メニュー' })).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-  });
 });

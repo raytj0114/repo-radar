@@ -18,7 +18,8 @@ const envSchema = z.object({
 
   // 任意。OAuthの折り返しを本番ドメインへ集約するリダイレクトプロキシ（Auth.js v5）。
   // URLごとにドメインが変わるプレビューデプロイでログインを成立させるためのもので、
-  // 設定するのはVercelのPreviewスコープのみ（docs/ARCHITECTURE.md「プレビュー環境（認証とDB）」）
+  // Vercelでは Preview と Production の**両スコープ**に同じ値を置く
+  // （本番が折り返す側になるため。→ docs/ARCHITECTURE.md「プレビュー環境（認証とDB）」）。
   // 前後の空白・改行と末尾スラッシュを落としてから使う。Auth.jsが
   // `${この値}/callback/github` と単純連結するため、ダッシュボードでの貼り付けに紛れた
   // 末尾の改行やスラッシュがそのまま redirect_uri に載り、GitHub側の完全一致照合から外れる

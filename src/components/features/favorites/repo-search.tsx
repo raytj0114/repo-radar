@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import type { SearchRepositoriesResult } from '@/lib/github/schemas';
 import { paperRepoKey } from '@/lib/paper';
-import paperStyles from '@/components/features/paper/paper.module.css';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 import { SubscribeToggle } from './subscribe-toggle';
 
 /**
@@ -32,7 +31,7 @@ export function RepoSearch({
 }) {
   return (
     <div>
-      <span className={paperStyles.kanban}>銘柄検索</span>
+      <span className={styles.kanban}>銘柄検索</span>
       <form action="/favorites" method="get" className={styles.searchForm}>
         {keepStarOpen && <input type="hidden" name="star" value="1" />}
         <input
@@ -65,25 +64,25 @@ function SearchOutcome({
       return null;
     case 'invalid':
       return (
-        <p className={paperStyles.kyusai}>
+        <p className={styles.kyusai}>
           検索語に使えない字が含まれる。英数字・空白・「. - _」のみで引き直しを。
         </p>
       );
     case 'rate-limited':
       // 相場欄（market-table.tsx）と同文。検索は相場と同じsearchプールを使う
-      return <p className={paperStyles.kyusai}>検索枠の上限につき本日は休載。</p>;
+      return <p className={styles.kyusai}>検索枠の上限につき本日は休載。</p>;
     case 'failed':
-      return <p className={paperStyles.kyusai}>データリンク不通につき休載。</p>;
+      return <p className={styles.kyusai}>データリンク不通につき休載。</p>;
     case 'ok':
       return state.result.items.length === 0 ? (
-        <p className={paperStyles.kyusai}>該当銘柄なし。</p>
+        <p className={styles.kyusai}>該当銘柄なし。</p>
       ) : (
-        <table className={paperStyles.chart}>
+        <table className={styles.chart}>
           <caption>検索の結果（上位十件まで）</caption>
           <thead>
             <tr>
               <th scope="col">銘柄</th>
-              <th scope="col" className={paperStyles.num}>
+              <th scope="col" className={styles.num}>
                 星数
               </th>
               <th scope="col">手続</th>
@@ -98,7 +97,7 @@ function SearchOutcome({
                     <small className={styles.repoDesc}>{repo.description}</small>
                   )}
                 </td>
-                <td className={paperStyles.num}>{repo.stargazers_count.toLocaleString('ja-JP')}</td>
+                <td className={styles.num}>{repo.stargazers_count.toLocaleString('ja-JP')}</td>
                 <td>
                   <SubscribeToggle
                     owner={repo.owner.login}

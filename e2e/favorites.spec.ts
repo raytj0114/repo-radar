@@ -31,8 +31,10 @@ test.describe('購読面', () => {
     await expect(page.getByRole('button', { name: '検索' })).toBeVisible();
     await expect(page.getByRole('link', { name: '星取帳を繰る' })).toBeVisible();
 
-    // 奥付ならぬフッタ: 一面への帰り道とログアウト
-    await expect(page.getByRole('link', { name: '一面へ戻る' })).toHaveAttribute('href', '/');
+    // 奥付: 一面への帰り道とログアウト（共通Colophon。題字のwordmarkも一面へ帰れる）
+    await expect(
+      page.getByRole('navigation', { name: '紙面案内' }).getByRole('link', { name: '一面' })
+    ).toHaveAttribute('href', '/');
     await expect(page.getByRole('button', { name: '退勤（ログアウト）' })).toBeVisible();
 
     assertNoConsoleErrors();

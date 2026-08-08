@@ -51,7 +51,7 @@ export default async function FrontPage() {
         <Suspense fallback={<PaperBodySkeleton />}>
           <PaperBody userId={session.user.id} paper={paper} />
         </Suspense>
-        <Colophon userName={session.user.name} issueNumber={paper.issueNumber} />
+        <Colophon userName={session.user.name} issueNumber={paper.issueNumber} current="front" />
       </div>
     </main>
   );

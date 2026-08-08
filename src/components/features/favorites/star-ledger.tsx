@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { toKanjiNumber } from '@/lib/format';
 import { STOP_PRESS_TEXT } from '@/components/features/paper/brief-list';
-import paperStyles from '@/components/features/paper/paper.module.css';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 import { StarImportForm, type StarRow } from './star-import-form';
 
 /**
@@ -25,7 +24,7 @@ export type StarLedgerState =
 export function StarLedger({ state }: { state: StarLedgerState }) {
   return (
     <div>
-      <span className={paperStyles.kanban}>星取帳</span>
+      <span className={styles.kanban}>星取帳</span>
       <StarLedgerBody state={state} />
     </div>
   );
@@ -44,21 +43,21 @@ function StarLedgerBody({ state }: { state: StarLedgerState }) {
       );
     case 'rate-limited':
       // 短信欄（brief-list.tsx）と同文・同じ朱帯。スター取得は短信と同じcoreプールを使う
-      return <p className={paperStyles.stopPress}>{STOP_PRESS_TEXT}</p>;
+      return <p className={styles.stopPress}>{STOP_PRESS_TEXT}</p>;
     case 'failed':
-      return <p className={paperStyles.kyusai}>データリンク不通につき休載。</p>;
+      return <p className={styles.kyusai}>データリンク不通につき休載。</p>;
     case 'no-account':
       return (
-        <p className={paperStyles.kyusai}>
+        <p className={styles.kyusai}>
           GitHub口座の紐付きが見当たらず、星取帳は開けない。再ログインで復旧の見込み。
         </p>
       );
     case 'login-missing':
-      return <p className={paperStyles.kyusai}>GitHub上の口座を確認できず、星取帳は休載。</p>;
+      return <p className={styles.kyusai}>GitHub上の口座を確認できず、星取帳は休載。</p>;
     case 'ok': {
       if (state.rows.length === 0) {
         return (
-          <p className={paperStyles.kyusai}>
+          <p className={styles.kyusai}>
             星付の銘柄なし。GitHubで星を付けると、ここから取り込める。
           </p>
         );

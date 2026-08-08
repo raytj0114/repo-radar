@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { importStarredFavorites } from '@/app/actions/favorites';
-import paperStyles from '@/components/features/paper/paper.module.css';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 
 export type StarRow = {
   /** GitHubリポジトリの数値ID。actionへ送るのはこれだけ（owner/name文字列は送らない） */
@@ -65,7 +64,7 @@ export function StarImportForm({ rows }: { rows: StarRow[] }) {
                   disabled
                 />
                 <span className={styles.breakAll}>
-                  <b>{row.fullName}</b>　<span className={styles.subscribedMark}>購読中</span>
+                  <b>{row.fullName}</b>　<span className={styles.markShu}>購読中</span>
                   {row.description && <small className={styles.repoDesc}>{row.description}</small>}
                 </span>
               </span>
@@ -101,7 +100,7 @@ export function StarImportForm({ rows }: { rows: StarRow[] }) {
       </div>
       <div aria-live="polite">
         {failed && !pending && (
-          <p className={paperStyles.stopPress}>星取帳の照合に失敗。時間をおいて再度お試しを。</p>
+          <p className={styles.stopPress}>星取帳の照合に失敗。時間をおいて再度お試しを。</p>
         )}
       </div>
     </form>

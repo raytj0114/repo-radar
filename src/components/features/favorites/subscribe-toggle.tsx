@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 import clsx from 'clsx';
 import { addFavorite, removeFavorite } from '@/app/actions/favorites';
-import styles from './favorites.module.css';
+import styles from '@/components/features/paper/paper.module.css';
 
 /**
  * 紙面版の購読トグル（判子）。呼ぶactionは既存のFavoriteToggle（chrome画面用）と同じで、

@@ -223,6 +223,11 @@
   font-size: 11px;
   letter-spacing: 0.1em;
 }
+/* 囲みの中の段落本文は左に組む（見出し・出典は囲みの中央揃えを継ぐ） */
+.pullquote p {
+  margin: 0;
+  text-align: left;
+}
 
 /* ---- 中段・下段グリッド ---- */
 .row {
@@ -316,6 +321,17 @@
 /* 改行入りテキストをそのまま組む（要約の行立て・旧形式ダイジェストの本文） */
 .preLine {
   white-space: pre-line;
+}
+
+/* dl を一行の対（「星数 18,420」）として組む（銘柄面の観測値行） */
+.inlinePair dt,
+.inlinePair dd {
+  display: inline;
+  margin: 0;
+}
+.inlinePair dt {
+  font-family: var(--gothic);
+  margin-right: 0.4em;
 }
 
 /* 長文の抜粋を3行で止める（銘柄面のリリース本文） */

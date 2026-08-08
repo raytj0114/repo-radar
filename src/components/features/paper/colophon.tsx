@@ -25,8 +25,8 @@ export function Colophon({
 }: {
   userName: string | null | undefined;
   issueNumber: number;
-  /** この奥付が載っている面。ナビでは行き先にせず現在地として示す */
-  current: PaperFace;
+  /** この奥付が載っている面。ナビでは行き先にせず現在地として示す（銘柄面などナビ外の面は省略） */
+  current?: PaperFace;
 }) {
   return (
     <footer className={styles.colophon}>

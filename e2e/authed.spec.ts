@@ -183,12 +183,14 @@ test.describe('縮刷版', () => {
   });
 });
 
-test.describe('リポジトリ詳細', () => {
+test.describe('銘柄面', () => {
   test('リポジトリ情報とリリース履歴が表示される', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${PRIMARY_FAVORITE.owner}/${PRIMARY_FAVORITE.name}`);
 
-    await expect(page.getByRole('heading', { name: PRIMARY_FULL_NAME, level: 1 })).toBeVisible();
+    // h1は面の題字（銘柄面）。銘柄名は欄の見出し（h2）になる（Issue #41）
+    await expect(page.getByRole('heading', { name: '銘柄面', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: PRIMARY_FULL_NAME, level: 2 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'リリース履歴', level: 2 })).toBeVisible();
     await expect(page.locator('main ol > li')).toHaveCount(VISIBLE_RELEASES_PER_REPO);
     await expect(page.getByRole('link', { name: 'v16.2.0', exact: true })).toBeVisible();
@@ -202,7 +204,7 @@ test.describe('リポジトリ詳細', () => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${MISSING_OWNER}/unknown-repo`);
 
-    await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
+    await expect(page.getByText('該当銘柄は見当たらない')).toBeVisible();
 
     assertNoConsoleErrors();
   });
@@ -216,7 +218,7 @@ test.describe('リポジトリ詳細', () => {
     const name = 'parallel-fetch';
 
     await page.goto(`/repos/${owner}/${name}`);
-    await expect(page.getByRole('heading', { name: `${owner}/${name}`, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${owner}/${name}`, level: 2 })).toBeVisible();
 
     const log: { path: string; startedAt: number; endedAt: number | null }[] = await (
       await request.get(`${MOCK_GITHUB_BASE_URL}/__requests?owner=${owner}`)
@@ -245,7 +247,7 @@ test.describe('リポジトリ詳細', () => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto(`/repos/${MISSING_OWNER}/${FAILING_RELEASES_NAME}`);
 
-    await expect(page.getByText('リポジトリが見つかりません')).toBeVisible();
+    await expect(page.getByText('該当銘柄は見当たらない')).toBeVisible();
 
     assertNoConsoleErrors();
   });

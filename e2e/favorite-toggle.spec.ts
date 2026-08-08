@@ -78,8 +78,11 @@ test.describe('購読トグルの往復', () => {
     const name = `${MINTED_REPO_PREFIX}-detail-${testInfo.project.name}-${Date.now()}`;
     await page.goto(`/repos/${MINTED_OWNER}/${name}`);
 
-    const addButton = page.getByRole('button', { name: 'お気に入りに追加' });
-    const removeButton = page.getByRole('button', { name: 'お気に入りから外す' });
+    // 銘柄面も購読判子（SubscribeToggle）で組まれる（Issue #41）。見ているものは変わらない:
+    // 押した直後のラベル反転＝action応答の到達
+    const fullName = `${MINTED_OWNER}/${name}`;
+    const addButton = page.getByRole('button', { name: `${fullName}を購読する` });
+    const removeButton = page.getByRole('button', { name: `${fullName}の購読をやめる` });
 
     await expect(addButton).toBeVisible();
     await addButton.click();

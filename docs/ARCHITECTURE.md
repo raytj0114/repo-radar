@@ -490,10 +490,12 @@ OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番
 1. Supabase で preview 用プロジェクトを新規作成（無料枠）
 2. Vercel → Settings → Environment Variables に **Preview スコープで**設定する
    - `AUTH_REDIRECT_PROXY_URL` = `https://repo-radar-sigma.vercel.app/api/auth`
-     （**末尾スラッシュを付けない**。Auth.jsが `${この値}/callback/github` と単純連結するため、
-     付けると `//callback/github` になりGitHubの完全一致照合から外れて
+     （**末尾にスラッシュや改行を付けない**。Auth.jsが `${この値}/callback/github` と
+     単純連結するため、`//callback/github` や `%0A/callback/github` になり、
+     GitHubの完全一致照合から外れて
      「redirect_uri is not associated with this application」になる。
-     `env.ts` 側でも落とすが、値としては付けない）
+     `new URL()` は改行を黙って除去するのでZodの `.url()` では捕まらない ——
+     `env.ts` 側で trim + 末尾スラッシュ除去をしているが、値としても付けない）
    - `DATABASE_URL` = preview Supabase の Transaction Pooler（6543）
    - `DIRECT_URL` = preview Supabase の Direct（5432）。`migrate deploy` が使うため必須
 

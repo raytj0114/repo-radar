@@ -3,14 +3,15 @@ import type { MarketDelta, MarketRow } from '@/lib/paper';
 import styles from './paper.module.css';
 
 /** 増減欄のセルの見え方。`label` は読み上げ環境向けの言い換え（▲▼は記号のままでは伝わらない） */
-type DeltaView = { text: string; label: string; up: boolean };
+export type DeltaView = { text: string; label: string; up: boolean };
 
 /**
  * 増減欄の組み方（Issue #40）。数字の出所は星数スナップショットの実差分だけで、
  * 差分が作れない銘柄には前日比風の数字を出さない（日割・「─」へ縮退する）。
- * 色は紙面の三色（紙・墨・朱）を崩さないため上昇のみ朱にし、増減の別は ▲▼ 記号が担う
+ * 色は紙面の三色（紙・墨・朱）を崩さないため上昇のみ朱にし、増減の別は ▲▼ 記号が担う。
+ * トレンド面（相場の全表）と共用する（Issue #41）
  */
-function deltaViewOf(delta: MarketDelta): DeltaView {
+export function deltaViewOf(delta: MarketDelta): DeltaView {
   if (delta.kind === 'none') return { text: '─', label: '記録なし', up: false };
   if (delta.kind === 'perDay') {
     const perDay = delta.perDay.toLocaleString('ja-JP');

@@ -103,30 +103,38 @@ test.describe('紙面（トップ）', () => {
   });
 });
 
-test.describe('トレンド', () => {
-  test('スターランキングが表示される', async ({ page }) => {
+test.describe('トレンド面', () => {
+  test('相場の全表が組まれ、前日比が一面の相場欄と同じ帯で出る', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/trending');
 
-    await expect(page.getByRole('heading', { name: 'トレンド', level: 1 })).toBeVisible();
-    await expect(page.locator('main ol > li')).toHaveCount(3);
-    // 18420 → 18.4K。モックの数値がサーバー側fetch経由で描画されている証拠になる
-    await expect(page.getByText('★ 18.4K')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'トレンド面', level: 1 })).toBeVisible();
+    await expect(page.locator('main tbody > tr')).toHaveCount(3);
+    // 18420 → ja-JPロケールの桁区切り。モックの数値がサーバー側fetch経由で描画されている証拠になる
+    await expect(page.getByText('18,420')).toBeVisible();
+
+    // 前日比（Issue #40/#41）: 数字の出所は一面の相場欄と同じ星数スナップショットの実差分だけ。
+    // 三態（前日比 / 欠測を挟む直近観測比 / 履歴なしの日割）が同じ列に並ぶ
+    const row = (fullName: string) => page.getByRole('row').filter({ hasText: fullName });
+    await expect(row('octocat/observability-dashboard-toolkit')).toContainText('▲300');
+    await expect(row('octocat/ferris-stream-processor')).toContainText('▼120※');
+    await expect(row('octocat/nolang')).toContainText('日割');
+    await expect(page.getByRole('cell', { name: '前日比 300増', exact: true })).toBeVisible();
 
     assertNoConsoleErrors();
   });
 
-  test('言語フィルタで絞り込める', async ({ page }) => {
+  test('言語別の判子で絞り込める', async ({ page }) => {
     const assertNoConsoleErrors = watchConsoleErrors(page);
     await page.goto('/trending');
 
     await page
-      .getByRole('navigation', { name: '言語フィルタ' })
+      .getByRole('navigation', { name: '言語別' })
       .getByRole('link', { name: 'Rust' })
       .click();
 
     await expect(page).toHaveURL(/\/trending\?language=Rust$/);
-    await expect(page.locator('main ol > li')).toHaveCount(1);
+    await expect(page.locator('main tbody > tr')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'octocat/ferris-stream-processor' })).toBeVisible();
 
     assertNoConsoleErrors();

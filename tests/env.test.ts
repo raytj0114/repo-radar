@@ -24,6 +24,8 @@ describe('env', () => {
     for (const key of [...Object.keys(VALID_ENV), 'SKIP_ENV_VALIDATION']) {
       vi.stubEnv(key, '');
     }
+    // 任意変数は「空文字」ではなく「未設定」が既定。空文字だとURL検証に落ちてしまう
+    vi.stubEnv('AUTH_REDIRECT_PROXY_URL', undefined);
   });
 
   afterEach(() => {
@@ -56,6 +58,43 @@ describe('env', () => {
     vi.stubEnv('DATABASE_URL', 'not-a-url');
     const env = await importEnv();
     expect(() => env.DATABASE_URL).toThrowError(/DATABASE_URL/);
+  });
+
+  it('AUTH_REDIRECT_PROXY_URL は任意（未設定でも他の変数を読める）', async () => {
+    for (const [key, value] of Object.entries(VALID_ENV)) {
+      vi.stubEnv(key, value);
+    }
+    const env = await importEnv();
+    expect(env.AUTH_REDIRECT_PROXY_URL).toBeUndefined();
+    expect(env.AUTH_SECRET).toBe(VALID_ENV.AUTH_SECRET);
+  });
+
+  // ダッシュボードへの貼り付けで実際に混入した2パターン（Issue #54）。
+  // どちらも `.url()` は素通りするため、正規化で落とすほかない
+  it.each([
+    ['末尾スラッシュ', 'https://example.com/api/auth/'],
+    ['末尾の改行', 'https://example.com/api/auth\n'],
+    ['前後の空白', '  https://example.com/api/auth  '],
+    ['改行とスラッシュの両方', 'https://example.com/api/auth/\n'],
+  ])(
+    'AUTH_REDIRECT_PROXY_URL の%sは落とす（連結時のredirect_uri崩れを防ぐ）',
+    async (_name, raw) => {
+      for (const [key, value] of Object.entries(VALID_ENV)) {
+        vi.stubEnv(key, value);
+      }
+      vi.stubEnv('AUTH_REDIRECT_PROXY_URL', raw);
+      const env = await importEnv();
+      expect(env.AUTH_REDIRECT_PROXY_URL).toBe('https://example.com/api/auth');
+    }
+  );
+
+  it('AUTH_REDIRECT_PROXY_URL がURL形式でない場合はエラーになる', async () => {
+    for (const [key, value] of Object.entries(VALID_ENV)) {
+      vi.stubEnv(key, value);
+    }
+    vi.stubEnv('AUTH_REDIRECT_PROXY_URL', 'not-a-url');
+    const env = await importEnv();
+    expect(() => env.AUTH_REDIRECT_PROXY_URL).toThrowError(/AUTH_REDIRECT_PROXY_URL/);
   });
 
   it('SKIP_ENV_VALIDATION=true のときは検証せず生の値を返す（CIビルド用）', async () => {

@@ -13,8 +13,16 @@
       "Bash(docker compose:*)"
     ],
     "deny": [
-      "Edit(.env*)",
-      "Write(.env*)",
+      "Edit(.env)",
+      "Write(.env)",
+      "Edit(.env.local)",
+      "Write(.env.local)",
+      "Edit(.env.development*)",
+      "Write(.env.development*)",
+      "Edit(.env.production*)",
+      "Write(.env.production*)",
+      "Edit(.env.test*)",
+      "Write(.env.test*)",
       "Edit(prisma/migrations/**)",
       "Write(prisma/migrations/**)"
     ]

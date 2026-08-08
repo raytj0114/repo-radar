@@ -162,6 +162,12 @@ Next.js サーバー
   数本生成し文体契約を機械チェック。**DBには書かない**ためキャッシュを汚さず、同一リリースで
   文面を変えて比較する反復ができる——画面からの生成はキャッシュファースト＋再生成フラグ禁止
   （不変条件2）のため、この反復には構造的に使えない）
+- **検証法の役割分担**（プロンプトに触るPRは両方を通す）:
+
+  | 場面                 | 手段                                | 見えるもの / 見えないもの                                                 |
+  | -------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+  | プロンプトの反復開発 | サンプラ（上記）                    | 文面と文体契約が見える。**紙面での見え方は見えない**                      |
+  | マージ前の最終目視   | プレビューデプロイ（→「デプロイ」） | 実UI・組版・375px・ストリーミングが見える。preview DBに書くので本番は無傷 |
 
 紙面「日刊 RepoRadar」（Issue #31、`/` = `src/app/(main)/page.tsx`）:
 
@@ -326,6 +332,10 @@ Suspense境界を置かない。`loading.tsx` によるルート境界も同じ�
 - Server Actionは冒頭で `await auth()` を検証。未認証は即エラー
 - 公開エンドポイント一覧（ここに無いものは全て認証必須）:
   - `GET/POST /api/auth/*` （Auth.js。CSRF検証はAuth.js内蔵）
+    - `AUTH_REDIRECT_PROXY_URL` が自ドメインを指すとき、本番の `/api/auth/callback/*` は
+      `state` に含まれる origin へ折り返す**中継**も兼ねる（→「プレビュー環境（認証とDB）」）。
+      state は `AUTH_SECRET` で署名・暗号化されており、**復号できない state は折り返さない**ため、
+      任意のURLへリダイレクトさせる踏み台にはならない
   - `/login` のsignIn Server Action（GitHub OAuthへのリダイレクトのみ。実処理はAuth.js側）
   - `signOutAction`（`src/app/actions/auth.ts`。ヘッダーと紙面奥付で共有。自セッションの破棄のみで副作用なし）
   - `GET /api/cron/digest` （`Authorization: Bearer ${CRON_SECRET}` を検証）
@@ -452,6 +462,92 @@ ownerは実行ごとに一意にする（Nextのfetchキャッシュに当たる
 - マイグレーション: GitHub Actions `migrate.yml` が main への push 時に
   `prisma migrate deploy` を実行（`DIRECT_URL` を使用）
 - Cron: Vercel Cron → `/api/cron/digest`（`vercel.json` で定義、Phase 5で追加）
+
+### プレビュー環境（認証とDB）
+
+プレビューデプロイのURLはPRごとに変わるため、GitHub OAuth Appのコールバックには登録できない。
+そのため以前は**プレビューで認証必須画面に到達できず**、紙面の実際の見え方をマージ前に
+確認する手段が無かった（Issue #40 で判明、#54 で解消）。
+
+**認証**: Auth.js v5 のリダイレクトプロキシ（`AUTH_REDIRECT_PROXY_URL`）を使う。
+OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番の `/api/auth` が折り返しを代行する。
+
+| 側         | `isOnRedirectProxy`   | 挙動                                                                                                                   |
+| ---------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| プレビュー | false（origin不一致） | `redirect_uri` をプロキシURLへ差し替え、自分のコールバックURLを `state.origin` に載せる                                |
+| 本番       | true（origin一致）    | 受けた `state` を復号し、origin が自分と違えばそこへ折り返す。自分のログインは `state.origin` を載せないので従来どおり |
+
+判定は `new URL(redirectProxyUrl).origin === リクエストのorigin` の一致だけで行われる
+（`@auth/core/lib/init.ts`）。つまり `AUTH_REDIRECT_PROXY_URL` は
+**Preview と Production の両方のスコープに同じ値が要る**。Production に無いと本番は
+折り返さず自分でcodeを消費しにいき、PKCEの `code_verifier` Cookie はプレビュー側の
+ドメインにあるため `InvalidCheck: pkceCodeVerifier value could not be parsed` で落ちる
+（Issue #54 の実機検証で確認。Preview のみ設定した状態で再現した）。
+
+本番自身のログインは、`state` チェックが1つ増える以外は従来どおり成立する
+（`redirectProxyUrl` があると `checks` に `state` が足される。本番は自分のoriginへ
+Cookieを置いて自分で検証するため閉じている。折り返しの分岐には `state.origin` が
+自分と異なるときしか入らない → `callback/index.ts:73-75`）。
+
+`trustHost` は Vercel 上では `VERCEL` 環境変数から自動でtrueになるため、コードでの指定は不要。
+
+**DB**: プレビューの `DATABASE_URL` / `DIRECT_URL` は固定の**preview専用Supabaseプロジェクト**を指す。
+未マージのコード・プロンプトがTTL無しの本番キャッシュへ書く経路を塞ぎ、`promptVersion` が刻む
+世代の純度を守るため（→「AIコスト設計」）。
+
+#### 設定手順（Vercel / Supabase ダッシュボード）
+
+1. Supabase で preview 用プロジェクトを新規作成（無料枠）
+2. Vercel → Settings → Environment Variables に設定する
+   - `AUTH_REDIRECT_PROXY_URL` = `https://repo-radar-sigma.vercel.app/api/auth`
+     を **Preview と Production の両スコープに**（上記のとおり本番が折り返す側になるため）
+     （**末尾にスラッシュや改行を付けない**。Auth.jsが `${この値}/callback/github` と
+     単純連結するため、`//callback/github` や `%0A/callback/github` になり、
+     GitHubの完全一致照合から外れて
+     「redirect_uri is not associated with this application」になる。
+     `new URL()` は改行を黙って除去するのでZodの `.url()` では捕まらない ——
+     `env.ts` 側で trim + 末尾スラッシュ除去をしているが、値としても付けない）
+   - `DATABASE_URL` = preview Supabase の Transaction Pooler（6543）※ **Preview スコープのみ**
+   - `DIRECT_URL` = preview Supabase の Direct（5432）※ **Preview スコープのみ**。
+     `migrate deploy` が使うため必須
+
+3. `AUTH_SECRET` が Production と Preview で**同一値**であることを確認する。
+   プレビューが署名した `state` を本番が復号する構図のため、分かれていると静かに失敗する
+4. `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` も Production と**同一値**であることを確認する。
+   プレビューの認可リクエストは `redirect_uri` に本番コールバックを載せて飛ぶので、
+   ローカル用（localhostコールバック）の別OAuth Appの値が入っていると GitHub 側で弾かれる
+5. `AUTH_URL`（および旧名 `NEXTAUTH_URL`）が Preview スコープに**無い**ことを確認する。
+   この2つは `env.ts` を通らず Auth.js が `process.env` から直接読む変数で
+   （`next-auth/lib/env.js` の `reqWithEnvURL`）、リクエストURLを丸ごと上書きするため
+   プレビューのorigin判定が壊れる。リポジトリ側には存在しないので、確認先はVercelのみ
+6. preview DB の初期化: **ローカルのリポジトリルートから**、preview Supabase の
+   Direct接続（5432）を指して一括適用する。`.env` は書き換えず、そのコマンドにだけ渡す
+   （書き換えると開発DBの向き先が変わり、戻し忘れが事故になる）:
+
+   ```powershell
+   # 別のPowerShellウィンドウで実行する（$env: はセッションに残るため）
+   $env:DATABASE_URL='<preview Supabase の Direct 5432 接続文字列>'
+   $env:DIRECT_URL=$env:DATABASE_URL
+   npx prisma migrate status   # 接続先と未適用の件数を目視してから
+   npx prisma migrate deploy
+   ```
+
+   `migrate deploy` が使うのは `directUrl` だが、`prisma/schema.prisma` の datasource が
+   `url` も解決するため両方に値が要る。本番も同じ形（`migrate.yml` は `DATABASE_URL` /
+   `DIRECT_URL` の両方に `PROD_DIRECT_URL` を渡している）。
+   以後は**スキーマ変更を含むPRのときだけ**同じ手順を当てる（CI化は必要になってから）
+
+7. **環境変数の追加・変更は実行中のデプロイには反映されない。**
+   対象環境をRedeploy（コード変更は不要）して初めて効く。
+   `AUTH_REDIRECT_PROXY_URL` は両スコープに入れるので、**Preview と Production の
+   両方をRedeployする**（本番だけ古いままだと折り返しが起きず `InvalidCheck` で落ちる）
+
+#### 既知の制約
+
+- Vercel Cron は production でのみ走るため、preview DBに朝刊は自動生成されない（紙面は休載表示）
+- 固定preview DBはPR間でスキーマを共有する。並行するスキーマ変更PRが常態化したら
+  Supabase Branching（Proプラン・PRごとに隔離DB）へ移行する
+- Deployment Protection が Preview に掛かっていると、preview URL への到達自体が阻まれる
 
 ### 必須チェック（ブランチ保護）
 

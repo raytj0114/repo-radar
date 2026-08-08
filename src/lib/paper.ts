@@ -1,5 +1,5 @@
 import type { DigestEntry } from '@/lib/digest';
-import { digestWindowFor } from '@/lib/digest-window';
+import { digestDayOf, digestWindowFor, WINDOW_END_HOUR_UTC } from '@/lib/digest-window';
 import { formatSilenceSpanJa, toKanjiNumber } from '@/lib/format';
 import { normalizeFullName } from '@/lib/repo-key';
 
@@ -57,20 +57,31 @@ export type PaperDate = {
 };
 
 /**
- * 「今日の号」を決める。窓終端（= now以前の直近21:00 UTC）が発行時刻で、
- * そのJST日付が紙面の日付。cronの発火遅れや閲覧時刻に依存しない
+ * 帰属日（DailyDigest.date のYYYY-MM-DD）から号を復元する。発行時刻は帰属日の21:00 UTC
+ * （= 窓終端 = 翌朝6:00 JST）で、そのJST日付が紙面の日付。縮刷版が過去号を
+ * 「発行朝の日付」で刷るための逆引き口（/digest の帰属日直刷りは1日ずれて見えていた）
  */
-export function paperDateFor(now: Date): PaperDate {
-  const window = digestWindowFor(now);
-  const issuedOnJst = jstDayOf(window.end);
+export function paperDateForDigestDay(digestDay: string): PaperDate {
+  const issuedAt = new Date(
+    `${digestDay}T${String(WINDOW_END_HOUR_UTC).padStart(2, '0')}:00:00.000Z`
+  );
+  const issuedOnJst = jstDayOf(issuedAt);
   const foundingMs = Date.parse(`${FOUNDING_DATE_JST}T00:00:00Z`);
   const issuedMs = Date.parse(`${issuedOnJst}T00:00:00Z`);
   const issueNumber = Math.max(1, Math.round((issuedMs - foundingMs) / DAY_MS) + 1);
   return {
-    digestDay: window.end.toISOString().slice(0, 10),
-    issuedAtIso: window.end.toISOString(),
+    digestDay,
+    issuedAtIso: issuedAt.toISOString(),
     issueNumber,
   };
+}
+
+/**
+ * 「今日の号」を決める。窓終端（= now以前の直近21:00 UTC）が発行時刻で、
+ * そのJST日付が紙面の日付。cronの発火遅れや閲覧時刻に依存しない
+ */
+export function paperDateFor(now: Date): PaperDate {
+  return paperDateForDigestDay(digestDayOf(digestWindowFor(now)));
 }
 
 /** リポジトリの同一性判定。src/lib/digest.ts の repoKeyOf と同じ正規化（小文字） */

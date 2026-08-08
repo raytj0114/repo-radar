@@ -478,7 +478,17 @@ OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番
 | 本番       | true（origin一致）    | 受けた `state` を復号し、origin が自分と違えばそこへ折り返す。自分のログインは `state.origin` を載せないので従来どおり |
 
 判定は `new URL(redirectProxyUrl).origin === リクエストのorigin` の一致だけで行われる
-（`@auth/core/lib/init.ts`）。つまり**折り返す側（本番）にも同じ環境変数が要る**点に注意する。
+（`@auth/core/lib/init.ts`）。つまり `AUTH_REDIRECT_PROXY_URL` は
+**Preview と Production の両方のスコープに同じ値が要る**。Production に無いと本番は
+折り返さず自分でcodeを消費しにいき、PKCEの `code_verifier` Cookie はプレビュー側の
+ドメインにあるため `InvalidCheck: pkceCodeVerifier value could not be parsed` で落ちる
+（Issue #54 の実機検証で確認。Preview のみ設定した状態で再現した）。
+
+本番自身のログインは、`state` チェックが1つ増える以外は従来どおり成立する
+（`redirectProxyUrl` があると `checks` に `state` が足される。本番は自分のoriginへ
+Cookieを置いて自分で検証するため閉じている。折り返しの分岐には `state.origin` が
+自分と異なるときしか入らない → `callback/index.ts:73-75`）。
+
 `trustHost` は Vercel 上では `VERCEL` 環境変数から自動でtrueになるため、コードでの指定は不要。
 
 **DB**: プレビューの `DATABASE_URL` / `DIRECT_URL` は固定の**preview専用Supabaseプロジェクト**を指す。
@@ -488,20 +498,18 @@ OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番
 #### 設定手順（Vercel / Supabase ダッシュボード）
 
 1. Supabase で preview 用プロジェクトを新規作成（無料枠）
-2. Vercel → Settings → Environment Variables に **Preview スコープで**設定する
+2. Vercel → Settings → Environment Variables に設定する
    - `AUTH_REDIRECT_PROXY_URL` = `https://repo-radar-sigma.vercel.app/api/auth`
+     を **Preview と Production の両スコープに**（上記のとおり本番が折り返す側になるため）
      （**末尾にスラッシュや改行を付けない**。Auth.jsが `${この値}/callback/github` と
      単純連結するため、`//callback/github` や `%0A/callback/github` になり、
      GitHubの完全一致照合から外れて
      「redirect_uri is not associated with this application」になる。
      `new URL()` は改行を黙って除去するのでZodの `.url()` では捕まらない ——
      `env.ts` 側で trim + 末尾スラッシュ除去をしているが、値としても付けない）
-   - `DATABASE_URL` = preview Supabase の Transaction Pooler（6543）
-   - `DIRECT_URL` = preview Supabase の Direct（5432）。`migrate deploy` が使うため必須
-
-   > 上表のとおり `AUTH_REDIRECT_PROXY_URL` は**折り返す側（Production スコープ）にも必要**と
-   > 読める。まず Preview のみで実機確認し、`InvalidCheck` 系で失敗するようなら Production にも
-   > 同じ値を足してRedeployする（この節は実機結果が出た時点で確定形に書き換えること）。
+   - `DATABASE_URL` = preview Supabase の Transaction Pooler（6543）※ **Preview スコープのみ**
+   - `DIRECT_URL` = preview Supabase の Direct（5432）※ **Preview スコープのみ**。
+     `migrate deploy` が使うため必須
 
 3. `AUTH_SECRET` が Production と Preview で**同一値**であることを確認する。
    プレビューが署名した `state` を本番が復号する構図のため、分かれていると静かに失敗する
@@ -530,7 +538,9 @@ OAuth Appのコールバックは**本番ドメイン1つのまま**で、本番
    以後は**スキーマ変更を含むPRのときだけ**同じ手順を当てる（CI化は必要になってから）
 
 7. **環境変数の追加・変更は実行中のデプロイには反映されない。**
-   対象環境をRedeploy（コード変更は不要）して初めて効く
+   対象環境をRedeploy（コード変更は不要）して初めて効く。
+   `AUTH_REDIRECT_PROXY_URL` は両スコープに入れるので、**Preview と Production の
+   両方をRedeployする**（本番だけ古いままだと折り返しが起きず `InvalidCheck` で落ちる）
 
 #### 既知の制約
 
